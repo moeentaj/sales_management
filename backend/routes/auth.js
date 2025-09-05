@@ -1,9 +1,9 @@
- // routes/auth.js
+// routes/auth.js
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const { query } = require('../config/database');
-const { generateToken, generateRefreshToken, authenticateToken } = require('../middleware/auth');
+const { authenticateToken, generateToken, generateRefreshToken } = require('../middleware/auth');
 
 const router = express.Router();
 

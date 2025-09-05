@@ -68,6 +68,64 @@ const generateRefreshToken = (userId) => {
     );
 };
 
+// Require specific role
+const requireRole = (role) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
+        if (req.user.role !== role) {
+            return res.status(403).json({
+                success: false,
+                message: `Access denied. ${role} role required.`
+            });
+        }
+
+        next();
+    };
+};
+
+// Check if user has access to specific distributor
+const checkDistributorAccess = async (req, res, next) => {
+    try {
+        const distributorId = req.params.distributorId || req.params.id || req.body.distributor_id;
+        const userId = req.user.user_id;
+
+        // Admin has access to all distributors
+        if (req.user.role === 'admin') {
+            return next();
+        }
+
+        // Sales staff can only access assigned distributors
+        if (req.user.role === 'sales_staff') {
+            const result = await query(
+                `SELECT 1 FROM sales_staff_distributors 
+                 WHERE sales_staff_id = $1 AND distributor_id = $2 AND is_active = true`,
+                [userId, distributorId]
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied: Distributor not assigned to you'
+                });
+            }
+        }
+
+        next();
+    } catch (error) {
+        console.error('Error checking distributor access:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error checking access permissions'
+        });
+    }
+};
+
 module.exports = {
     authenticateToken,
     requireRole,
