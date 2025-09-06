@@ -1,3 +1,4 @@
+// backend/server.js - Updated to include payments route
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -29,12 +30,12 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static files for uploads
 app.use('/uploads', express.static('uploads'));
 
-// Import routes - only import existing route files
+// Import routes - core routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 
-// Import the new API routes we created
-let distributorRoutes, productRoutes, dashboardRoutes;
+// Import the implemented API routes
+let distributorRoutes, productRoutes, dashboardRoutes, invoiceRoutes, paymentRoutes;
 
 try {
     distributorRoutes = require('./routes/distributors');
@@ -54,9 +55,6 @@ try {
     console.log('⚠️ dashboard.js route not found or has errors:', error.message);
 }
 
-// Import remaining routes (these might be empty)
-let invoiceRoutes, paymentRoutes, reportRoutes, uploadRoutes;
-
 try {
     invoiceRoutes = require('./routes/invoices');
 } catch (error) {
@@ -65,9 +63,13 @@ try {
 
 try {
     paymentRoutes = require('./routes/payments');
+    console.log('✅ Payments route loaded successfully');
 } catch (error) {
     console.log('⚠️ payments.js route not found or has errors:', error.message);
 }
+
+// Import remaining routes (placeholders)
+let reportRoutes, uploadRoutes;
 
 try {
     reportRoutes = require('./routes/reports');
@@ -126,7 +128,7 @@ app.get('/api/health', (req, res) => {
             products: productRoutes ? '✅' : '❌',
             dashboard: dashboardRoutes ? '✅' : '❌',
             invoices: invoiceRoutes ? '✅' : '❌',
-            payments: paymentRoutes ? '✅' : '❌',
+            payments: paymentRoutes ? '✅' : '❌', // NEW
             reports: reportRoutes ? '✅' : '❌',
             upload: uploadRoutes ? '✅' : '❌'
         }
@@ -173,6 +175,7 @@ app.listen(PORT, () => {
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔗 API URL: http://localhost:${PORT}/api`);
     console.log(`❤️ Health Check: http://localhost:${PORT}/api/health`);
+    console.log(`💰 Payment Collection API: Ready!`);
 });
 
 module.exports = app;
