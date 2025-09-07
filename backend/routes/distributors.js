@@ -39,12 +39,11 @@ router.get('/', authenticateToken, async (req, res) => {
         const params = [];
         let paramIndex = 1;
 
-        // For sales staff, only show assigned distributors
         if (req.user.role === 'sales_staff') {
             whereClause += ` AND d.distributor_id IN (
-                SELECT distributor_id FROM sales_staff_distributors 
-                WHERE sales_staff_id = $${paramIndex} AND is_active = true
-            )`;
+        SELECT distributor_id FROM sales_staff_distributors 
+        WHERE sales_staff_id = $${paramIndex} AND is_active = true
+      )`;
             params.push(req.user.user_id);
             paramIndex++;
         }
@@ -67,73 +66,69 @@ router.get('/', authenticateToken, async (req, res) => {
             paramIndex++;
         }
 
-        // Get total count
+        // Total count
         const countResult = await query(
             `SELECT COUNT(*) FROM distributors d ${whereClause}`,
             params
         );
-        const totalDistributors = parseInt(countResult.rows[0].count);
+        const total = parseInt(countResult.rows[0].count);
 
-        // Get distributors with pagination
+        // ✅ Main query: no distributorId filter, just use pagination
         const result = await query(
             `SELECT 
-                d.distributor_id, d.distributor_name, d.address, d.city, d.state, 
-                d.postal_code, d.ntn_number, d.primary_contact_person, 
-                d.primary_whatsapp_number, d.is_active, d.created_at, d.updated_at,
-                u.full_name as created_by_name,
-                (SELECT json_agg(json_build_object(
-                    'contact_id', dc.contact_id,
-                    'contact_person_name', dc.contact_person_name,
-                    'whatsapp_number', dc.whatsapp_number,
-                    'phone_number', dc.phone_number,
-                    'email', dc.email,
-                    'designation', dc.designation,
-                    'is_primary', dc.is_primary
-                )) FROM distributor_contacts dc WHERE dc.distributor_id = d.distributor_id) as contacts,
-                (SELECT json_agg(json_build_object(
-                    'sales_staff_id', ssd.sales_staff_id,
-                    'full_name', us.full_name,
-                    'email', us.email,
-                    'assigned_date', ssd.assigned_date,
-                    'is_active', ssd.is_active
-                )) FROM sales_staff_distributors ssd
-                 JOIN users us ON us.user_id = ssd.sales_staff_id
-                 WHERE ssd.distributor_id = d.distributor_id) as assigned_staff,
-                (SELECT COUNT(*) FROM invoices WHERE distributor_id = d.distributor_id) as total_invoices,
-                (SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE distributor_id = d.distributor_id) as total_amount,
-                (SELECT COALESCE(SUM(paid_amount), 0) FROM invoices WHERE distributor_id = d.distributor_id) as paid_amount,
-                (SELECT COUNT(*) FROM invoices WHERE distributor_id = d.distributor_id AND status IN ('sent', 'partial_paid', 'overdue')) as pending_invoices
-             FROM distributors d
-             LEFT JOIN users u ON u.user_id = d.created_by
-             WHERE d.distributor_id = $1`,
+         d.distributor_id, d.distributor_name, d.address, d.city, d.state, 
+         d.postal_code, d.ntn_number, d.primary_contact_person, 
+         d.primary_whatsapp_number, d.is_active, d.created_at, d.updated_at,
+         u.full_name as created_by_name
+       FROM distributors d
+       LEFT JOIN users u ON u.user_id = d.created_by
+       ${whereClause}
+       ORDER BY d.distributor_name ASC
+       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+            [...params, limit, offset]
+        );
+
+        res.json({
+            success: true,
+            data: result.rows,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
+            }
+        });
+
+    } catch (error) {
+        console.error('Get distributors error:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// GET /api/distributors/:id
+router.get('/:id', authenticateToken, async (req, res) => {
+    try {
+        const distributorId = req.params.id;
+        const result = await query(
+            `SELECT * FROM distributors WHERE distributor_id = $1`,
             [distributorId]
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Distributor not found'
-            });
+            return res.status(404).json({ success: false, message: 'Distributor not found' });
         }
 
-        res.json({
-            success: true,
-            data: result.rows[0]
-        });
-
+        res.json({ success: true, data: result.rows[0] });
     } catch (error) {
-        console.error('Get distributor error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        console.error('Get distributor by id error:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
 
 // POST /api/distributors - Create new distributor
 router.post('/', authenticateToken, requireRole('admin'), createDistributorValidation, async (req, res) => {
     const client = await getClient();
-    
+
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -160,7 +155,7 @@ router.post('/', authenticateToken, requireRole('admin'), createDistributorValid
                        ntn_number, primary_contact_person, primary_whatsapp_number, 
                        is_active, created_at`,
             [distributor_name, address, city, state, postal_code, ntn_number,
-             primary_contact_person, primary_whatsapp_number, req.user.user_id]
+                primary_contact_person, primary_whatsapp_number, req.user.user_id]
         );
 
         const distributor = distributorResult.rows[0];
@@ -173,7 +168,7 @@ router.post('/', authenticateToken, requireRole('admin'), createDistributorValid
                                                      whatsapp_number, phone_number, email, designation, is_primary)
                      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                     [distributor.distributor_id, contact.contact_person_name, contact.whatsapp_number,
-                     contact.phone_number, contact.email, contact.designation, contact.is_primary || false]
+                    contact.phone_number, contact.email, contact.designation, contact.is_primary || false]
                 );
             }
         }
@@ -200,14 +195,14 @@ router.post('/', authenticateToken, requireRole('admin'), createDistributorValid
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Create distributor error:', error);
-        
+
         if (error.code === '23505') { // Unique violation
             return res.status(400).json({
                 success: false,
                 message: 'Distributor with this name already exists'
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: 'Internal server error'
@@ -220,7 +215,7 @@ router.post('/', authenticateToken, requireRole('admin'), createDistributorValid
 // PUT /api/distributors/:id - Update distributor
 router.put('/:id', authenticateToken, requireRole('admin'), updateDistributorValidation, async (req, res) => {
     const client = await getClient();
-    
+
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -311,7 +306,7 @@ router.put('/:id', authenticateToken, requireRole('admin'), updateDistributorVal
                                                      whatsapp_number, phone_number, email, designation, is_primary)
                      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                     [distributorId, contact.contact_person_name, contact.whatsapp_number,
-                     contact.phone_number, contact.email, contact.designation, contact.is_primary || false]
+                        contact.phone_number, contact.email, contact.designation, contact.is_primary || false]
                 );
             }
         }
@@ -364,14 +359,14 @@ router.put('/:id', authenticateToken, requireRole('admin'), updateDistributorVal
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Update distributor error:', error);
-        
+
         if (error.code === '23505') { // Unique violation
             return res.status(400).json({
                 success: false,
                 message: 'Distributor with this name already exists'
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: 'Internal server error'
@@ -509,7 +504,7 @@ router.get('/:id/invoices', authenticateToken, checkDistributorAccess, async (re
 router.get('/search/suggestions', authenticateToken, async (req, res) => {
     try {
         const search = req.query.q || '';
-        
+
         if (search.length < 2) {
             return res.json({
                 success: true,

@@ -11,8 +11,20 @@ const PORT = process.env.PORT || 3001;
 // Security middleware
 app.use(helmet());
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3002',
-    credentials: true
+  origin: (origin, cb) => {
+    const allowed = [
+      'http://localhost:3002',
+      'http://localhost:3000',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean);
+
+    if (!origin) return cb(null, true); // allow curl/Postman
+    if (allowed.includes(origin) || /^http:\/\/localhost:3\d{3}$/.test(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
 }));
 
 // Rate limiting

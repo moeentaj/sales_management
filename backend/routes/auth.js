@@ -62,6 +62,9 @@ router.post('/login', loginValidation, async (req, res) => {
         }
 
         // Verify password
+        //bcrypt.hash(password, 12, function (err, hash) {
+        //    console.log(hash);
+        //});
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
             return res.status(401).json({

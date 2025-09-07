@@ -1,4 +1,4 @@
- // middleware/auth.js
+// middleware/auth.js
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/database');
 
@@ -6,53 +6,67 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
 
 // Verify JWT token
 const authenticateToken = async (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
 
     if (!token) {
-        return res.status(401).json({
-            success: false,
-            message: 'Access token is required'
-        });
+        return res.status(401).json({ success: false, message: 'Access token is required' });
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        
-        // Verify user still exists and is active
+        const decoded = jwt.verify(token, JWT_SECRET); // { userId, email, role, ... }
+
+        // Make sure user still exists and is active
         const result = await query(
             'SELECT user_id, username, email, role, full_name, is_active FROM users WHERE user_id = $1',
             [decoded.userId]
         );
 
         if (result.rows.length === 0) {
-            return res.status(403).json({
-                success: false,
-                message: 'Access denied: Distributor not assigned to you'
-            });
+            return res.status(401).json({ success: false, message: 'Invalid user' });
         }
 
-        next();
-    } catch (error) {
-        console.error('Error checking distributor access:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error checking access permissions'
-        });
+        const row = result.rows[0];
+
+        // ✅ Attach user to request for downstream middleware/routes
+        req.user = {
+            user_id: row.user_id,
+            username: row.username,
+            email: row.email,
+            role: row.role,
+            full_name: row.full_name,
+            is_active: row.is_active,
+            // you can also keep decoded data if needed:
+            token_claims: decoded,
+        };
+
+        return next();
+    } catch (err) {
+        // Send appropriate auth errors
+        const isJwtError =
+            err.name === 'JsonWebTokenError' ||
+            err.name === 'TokenExpiredError' ||
+            err.name === 'NotBeforeError';
+
+        if (isJwtError) {
+            return res.status(401).json({ success: false, message: 'Invalid token', details: err.message });
+        }
+        console.error('Error checking distributor access:', err);
+        return res.status(500).json({ success: false, message: 'Error checking access permissions' });
     }
 };
 
 // Generate JWT token
 const generateToken = (userId, email, role) => {
     return jwt.sign(
-        { 
-            userId, 
-            email, 
+        {
+            userId,
+            email,
             role,
             iat: Math.floor(Date.now() / 1000)
         },
         JWT_SECRET,
-        { 
+        {
             expiresIn: process.env.JWT_EXPIRES_IN || '24h',
             issuer: 'sales-management-system'
         }
