@@ -668,8 +668,10 @@ const CreateInvoiceModal = ({ onClose, onSuccess }) => {
                     api.get('/distributors?limit=100'),
                     api.get('/products?limit=100')
                 ]);
-                setDistributors(distributorsRes.data.data.distributors);
-                setProducts(productsRes.data.data.products);
+                // setDistributors(distributorsRes.data.data.distributors);
+                // setProducts(productsRes.data.data.products);
+                setDistributors(distributorsRes?.data?.data?.distributors ?? []);
+                setProducts(productsRes?.data?.data?.products ?? []);
             } catch (error) {
                 console.error('Error fetching data:', error);
             }
@@ -713,12 +715,15 @@ const CreateInvoiceModal = ({ onClose, onSuccess }) => {
 
     // Calculate totals
     const calculateTotals = () => {
+        const safeProducts = Array.isArray(products) ? products : [];
         let subtotal = 0;
         let totalTax = 0;
 
-        formData.items.forEach(item => {
+        // formData.items.forEach(item => {
+        (formData.items ?? []).forEach(item => {
             if (item.product_id && item.quantity && item.unit_price) {
-                const product = products.find(p => p.product_id == item.product_id);
+                //const product = products.find(p => p.product_id == item.product_id);
+                const product = safeProducts.find(p => p.product_id == item.product_id);
                 const linePrice = parseFloat(item.unit_price) * parseFloat(item.quantity);
                 const discount = (linePrice * parseFloat(item.discount_percentage || 0)) / 100;
                 const lineSubtotal = linePrice - discount;
@@ -777,7 +782,8 @@ const CreateInvoiceModal = ({ onClose, onSuccess }) => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Select Distributor</option>
-                                    {distributors.map(distributor => (
+                                    {/* {distributors.map(distributor => ( */}
+                                    {(distributors ?? []).map(distributor => (
                                         <option key={distributor.distributor_id} value={distributor.distributor_id}>
                                             {distributor.distributor_name} - {distributor.city}
                                         </option>
@@ -812,7 +818,8 @@ const CreateInvoiceModal = ({ onClose, onSuccess }) => {
                             </div>
 
                             <div className="space-y-3">
-                                {formData.items.map((item, index) => (
+                                {/* {formData.items.map((item, index) => ( */}
+                                {(formData.items ?? []).map((item, index) => (
                                     <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-2 p-3 border rounded">
                                         <div className="md:col-span-2">
                                             <select
@@ -822,7 +829,8 @@ const CreateInvoiceModal = ({ onClose, onSuccess }) => {
                                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                                             >
                                                 <option value="">Select Product</option>
-                                                {products.map(product => (
+                                                {/* {products.map(product => ( */}
+                                                {(products ?? []).map(product => (
                                                     <option key={product.product_id} value={product.product_id}>
                                                         {product.product_name} - ${product.unit_price}
                                                     </option>
