@@ -1,21 +1,22 @@
-// components/sales/PaymentCollection.js
+// components/sales/PaymentCollection.js - COMPLETE IMPLEMENTATION
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Search, Camera, DollarSign, Check, X, AlertCircle,
     Calendar, CreditCard, Banknote, FileText, Smartphone,
-    CheckCircle, Clock, ArrowRight, Plus, Minus
+    CheckCircle, Clock, ArrowRight, Plus, Minus, ArrowLeft,
+    Upload, Download, RotateCcw, Loader
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { paymentService } from '../../services/paymentService';
-import { uploadService } from '../../services/uploadService';
 import CameraCapture from '../common/CameraCapture';
 
 const MobilePaymentCollection = ({ onClose, onSuccess, preSelectedInvoice = null }) => {
     const { user } = useAuth();
-    const [currentStep, setCurrentStep] = useState(preSelectedInvoice ? 2 : 1); // 1: Select Invoice, 2: Payment Details, 3: Confirmation
+    const [currentStep, setCurrentStep] = useState(preSelectedInvoice ? 2 : 1);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    // Data
+    // Data states
     const [pendingInvoices, setPendingInvoices] = useState([]);
     const [selectedInvoice, setSelectedInvoice] = useState(preSelectedInvoice);
     const [searchTerm, setSearchTerm] = useState('');
@@ -24,55 +25,119 @@ const MobilePaymentCollection = ({ onClose, onSuccess, preSelectedInvoice = null
     const [paymentData, setPaymentData] = useState({
         amount: '',
         payment_method: 'cash',
-        payment_date: paymentService.getDefaultPaymentDate(),
+        payment_date: new Date().toISOString().split('T')[0], // Today's date
         check_number: '',
         bank_reference: '',
         notes: '',
         check_image_url: ''
     });
 
-    // Camera states
+    // Camera and upload states
     const [showCamera, setShowCamera] = useState(false);
     const [capturedImage, setCapturedImage] = useState(null);
+    const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [checkImageUrl, setCheckImageUrl] = useState('');
-    const videoRef = useRef(null);
-    const canvasRef = useRef(null);
 
-    // Load pending invoices
+    // Load pending invoices on component mount
     useEffect(() => {
-        loadPendingInvoices();
-    }, []);
+        if (currentStep === 1) {
+            loadPendingInvoices();
+        }
+    }, [currentStep]);
+
+    // Set initial amount when invoice is selected
+    useEffect(() => {
+        if (selectedInvoice && !paymentData.amount) {
+            setPaymentData(prev => ({
+                ...prev,
+                amount: selectedInvoice.balance_amount?.toString() || ''
+            }));
+        }
+    }, [selectedInvoice]);
 
     const loadPendingInvoices = async () => {
         try {
             setLoading(true);
-            const response = await paymentService.mobile.getMobilePendingInvoices(50);
-            setPendingInvoices(response.data);
+            setError('');
+            
+            const response = await paymentService.getPendingInvoices(null, 50);
+            
+            if (response.success && response.data) {
+                // Sort by priority: overdue first, then by due date
+                const sortedInvoices = response.data.sort((a, b) => {
+                    const aOverdue = a.days_overdue || 0;
+                    const bOverdue = b.days_overdue || 0;
+                    
+                    if (aOverdue > 0 && bOverdue === 0) return -1;
+                    if (aOverdue === 0 && bOverdue > 0) return 1;
+                    if (aOverdue > 0 && bOverdue > 0) {
+                        return bOverdue - aOverdue; // Most overdue first
+                    }
+                    return new Date(a.due_date) - new Date(b.due_date);
+                });
+                
+                setPendingInvoices(sortedInvoices);
+            } else {
+                setPendingInvoices([]);
+                setError('Failed to load pending invoices');
+            }
         } catch (error) {
             console.error('Error loading pending invoices:', error);
+            setPendingInvoices([]);
+            setError('Failed to load pending invoices. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    // Filter invoices based on search
+    // Filter invoices based on search term
     const filteredInvoices = pendingInvoices.filter(invoice =>
-        invoice.distributor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())
+        invoice.distributor_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ''
     );
 
     // Payment methods configuration
-    const paymentMethods = paymentService.mobile.getPaymentMethods();
+    const paymentMethods = [
+        { 
+            value: 'cash', 
+            label: 'Cash', 
+            icon: Banknote, 
+            description: 'Cash payment',
+            color: 'green'
+        },
+        { 
+            value: 'check', 
+            label: 'Check', 
+            icon: FileText, 
+            description: 'Check payment',
+            color: 'blue'
+        },
+        { 
+            value: 'bank_transfer', 
+            label: 'Bank Transfer', 
+            icon: CreditCard, 
+            description: 'Bank transfer',
+            color: 'purple'
+        },
+        { 
+            value: 'online', 
+            label: 'Online', 
+            icon: Smartphone, 
+            description: 'Online payment',
+            color: 'indigo'
+        }
+    ];
 
     // Select invoice and move to payment step
     const selectInvoice = (invoice) => {
         setSelectedInvoice(invoice);
         setPaymentData(prev => ({
             ...prev,
-            amount: invoice.balance_amount.toString()
+            amount: invoice.balance_amount?.toString() || ''
         }));
         setCurrentStep(2);
+        setError('');
     };
 
     // Handle payment amount suggestions
@@ -83,108 +148,64 @@ const MobilePaymentCollection = ({ onClose, onSuccess, preSelectedInvoice = null
         }));
     };
 
-    // Camera functions
-    const startCamera = async () => {
-        try {
-            setShowCamera(true);
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' } // Use back camera
-            });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-            }
-        } catch (error) {
-            console.error('Error accessing camera:', error);
-            alert('Camera access denied or not available');
-            setShowCamera(false);
-        }
-    };
-
-    const capturePhoto = () => {
-        if (videoRef.current && canvasRef.current) {
-            const context = canvasRef.current.getContext('2d');
-            canvasRef.current.width = videoRef.current.videoWidth;
-            canvasRef.current.height = videoRef.current.videoHeight;
-
-            context.drawImage(videoRef.current, 0, 0);
-
-            canvasRef.current.toBlob((blob) => {
-                const imageUrl = URL.createObjectURL(blob);
-                setCapturedImage(imageUrl);
-                setShowCamera(false);
-
-                // Stop camera stream
-                if (videoRef.current && videoRef.current.srcObject) {
-                    videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-                }
-            }, 'image/jpeg', 0.8);
-        }
-    };
-
+    // Handle camera capture
     const handleCameraCapture = async (imageBlob, imageUrl) => {
         try {
             setCapturedImage({ blob: imageBlob, url: imageUrl });
-
-            // If this is for a check payment, upload immediately
-            if (paymentData.payment_method === 'check') {
-                setUploadProgress(0);
-
-                const result = await uploadService.uploadCheckImage(
-                    imageBlob,
-                    null, // No payment ID yet - will be updated after payment creation
-                    (progress) => setUploadProgress(progress)
-                );
-
-                setCheckImageUrl(result.data.url);
-                setPaymentData(prev => ({
-                    ...prev,
-                    check_image_url: result.data.url
-                }));
-            }
-
             setShowCamera(false);
+            
+            // Optionally upload immediately
+            if (imageBlob) {
+                setUploading(true);
+                try {
+                    const uploadResult = await uploadCheckImage(imageBlob);
+                    setPaymentData(prev => ({
+                        ...prev,
+                        check_image_url: uploadResult.data?.image_url || ''
+                    }));
+                } catch (uploadError) {
+                    console.error('Upload failed:', uploadError);
+                    // Keep the captured image but don't set URL
+                } finally {
+                    setUploading(false);
+                }
+            }
         } catch (error) {
             console.error('Camera capture error:', error);
-            alert('Failed to capture image. Please try again.');
-            setShowCamera(false);
+            setError('Failed to capture image');
         }
     };
 
-    const stopCamera = async (imageBlob, imageUrl) => {
-        try {
-            setCapturedImage({ blob: imageBlob, url: imageUrl });
-
-            // If this is for a check payment, upload immediately
-            if (paymentData.payment_method === 'check') {
-                setUploadProgress(0);
-
-                const result = await uploadService.uploadCheckImage(
-                    imageBlob,
-                    null, // No payment ID yet - will be updated after payment creation
-                    (progress) => setUploadProgress(progress)
-                );
-
-                setCheckImageUrl(result.data.url);
-                setPaymentData(prev => ({
-                    ...prev,
-                    check_image_url: result.data.url
-                }));
-            }
-
-            setShowCamera(false);
-        } catch (error) {
-            console.error('Camera capture error:', error);
-            alert('Failed to capture image. Please try again.');
-            setShowCamera(false);
-        }
+    const handleCameraClose = () => {
+        setShowCamera(false);
     };
 
+    // Upload check image
+    const uploadCheckImage = async (imageBlob) => {
+        const formData = new FormData();
+        formData.append('check_image', imageBlob);
+        
+        const response = await fetch('/api/upload/check-image', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error('Upload failed');
+        }
+        
+        return await response.json();
+    };
+
+    // Remove captured image
     const removeCheckImage = () => {
         if (capturedImage) {
             URL.revokeObjectURL(capturedImage.url);
         }
         setCapturedImage(null);
-        setCheckImageUrl('');
         setPaymentData(prev => ({
             ...prev,
             check_image_url: ''
@@ -199,16 +220,22 @@ const MobilePaymentCollection = ({ onClose, onSuccess, preSelectedInvoice = null
             errors.push('Valid amount is required');
         }
 
-        if (parseFloat(paymentData.amount) > parseFloat(selectedInvoice.balance_amount)) {
+        if (!selectedInvoice?.balance_amount) {
+            errors.push('Invalid invoice selected');
+        } else if (parseFloat(paymentData.amount) > parseFloat(selectedInvoice.balance_amount)) {
             errors.push('Amount cannot exceed invoice balance');
         }
 
-        if (paymentData.payment_method === 'check' && !paymentData.check_number) {
+        if (paymentData.payment_method === 'check' && !paymentData.check_number.trim()) {
             errors.push('Check number is required');
         }
 
-        if (paymentData.payment_method === 'bank_transfer' && !paymentData.bank_reference) {
+        if (paymentData.payment_method === 'bank_transfer' && !paymentData.bank_reference.trim()) {
             errors.push('Bank reference is required');
+        }
+
+        if (!paymentData.payment_date) {
+            errors.push('Payment date is required');
         }
 
         return errors;
@@ -218,440 +245,580 @@ const MobilePaymentCollection = ({ onClose, onSuccess, preSelectedInvoice = null
     const submitPayment = async () => {
         const errors = validatePayment();
         if (errors.length > 0) {
-            alert(errors.join('\n'));
+            setError(errors.join('\n'));
             return;
         }
 
         setLoading(true);
+        setError('');
+        
         try {
             const submitData = {
-                ...paymentService.formatPaymentForAPI(paymentData),
                 invoice_id: selectedInvoice.invoice_id,
-                check_image_url: checkImageUrl
+                amount: parseFloat(paymentData.amount),
+                payment_method: paymentData.payment_method,
+                payment_date: paymentData.payment_date,
+                check_number: paymentData.check_number || null,
+                bank_reference: paymentData.bank_reference || null,
+                notes: paymentData.notes || null,
+                check_image_url: paymentData.check_image_url || null
             };
 
-            await paymentService.recordPayment(submitData);
-            setCurrentStep(3);
-
-            // Auto-close after showing success
-            setTimeout(() => {
-                onSuccess('Payment recorded successfully');
-                onClose();
-            }, 2000);
+            const response = await paymentService.recordPayment(submitData);
+            
+            if (response.success) {
+                setCurrentStep(3);
+                
+                // Auto-close after showing success
+                setTimeout(() => {
+                    if (onSuccess) onSuccess('Payment recorded successfully');
+                    if (onClose) onClose();
+                }, 2500);
+            } else {
+                setError(response.message || 'Failed to record payment');
+            }
 
         } catch (error) {
             console.error('Error recording payment:', error);
-            alert('Error recording payment. Please try again.');
+            setError(error.response?.data?.message || 'Error recording payment. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    // Render step 1: Select Invoice
+    // Get payment amount suggestions
+    const getAmountSuggestions = () => {
+        if (!selectedInvoice?.balance_amount) return [];
+        
+        const balance = parseFloat(selectedInvoice.balance_amount);
+        return [
+            { label: 'Full Amount', amount: balance },
+            { label: '50%', amount: Math.round(balance * 0.5 * 100) / 100 },
+            { label: '25%', amount: Math.round(balance * 0.25 * 100) / 100 }
+        ];
+    };
+
+    // Format currency display
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD'
+        }).format(amount || 0);
+    };
+
+    // Get payment method color
+    const getMethodColor = (method) => {
+        const methodConfig = paymentMethods.find(m => m.value === method);
+        return methodConfig?.color || 'gray';
+    };
+
+    // Render step 1: Invoice Selection
     const renderInvoiceSelection = () => (
         <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="bg-green-600 text-white p-4">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Collect Payment</h2>
-                    <button onClick={onClose} className="p-1">
-                        <X className="w-6 h-6" />
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+                <div className="flex items-center space-x-3">
+                    <button 
+                        onClick={onClose} 
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        <X className="w-5 h-5 text-gray-600" />
                     </button>
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900">Select Invoice</h2>
+                        <p className="text-sm text-gray-600">Choose invoice to collect payment</p>
+                    </div>
                 </div>
+            </div>
 
-                {/* Search */}
-                <div className="mt-3 relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-green-200" />
+            {/* Search */}
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                     <input
                         type="text"
-                        placeholder="Search invoices..."
+                        placeholder="Search by distributor or invoice number..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-green-500 border border-green-400 rounded-lg text-white placeholder-green-200 focus:outline-none focus:ring-2 focus:ring-green-300"
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                     />
                 </div>
             </div>
 
+            {/* Error Display */}
+            {error && (
+                <div className="p-4 bg-red-50 border-b border-red-200">
+                    <div className="flex items-center space-x-2">
+                        <AlertCircle className="w-5 h-5 text-red-600" />
+                        <p className="text-sm text-red-800">{error}</p>
+                    </div>
+                </div>
+            )}
+
             {/* Invoice List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto bg-gray-50">
                 {loading ? (
-                    <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-                        <p className="text-gray-600 mt-2">Loading invoices...</p>
+                    <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading invoices...</p>
+                        </div>
                     </div>
                 ) : filteredInvoices.length === 0 ? (
-                    <div className="text-center py-8">
-                        <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                        <p className="text-gray-600">No pending invoices found</p>
+                    <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8">
+                        <FileText className="w-16 h-16 mb-4 text-gray-300" />
+                        <h3 className="text-lg font-medium mb-2">No pending invoices</h3>
+                        <p className="text-center text-gray-400">
+                            {searchTerm ? 'No invoices match your search' : 'All invoices have been paid'}
+                        </p>
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="mt-4 text-blue-600 hover:text-blue-800"
+                            >
+                                Clear search
+                            </button>
+                        )}
                     </div>
                 ) : (
-                    filteredInvoices.map(invoice => (
-                        <div
-                            key={invoice.invoice_id}
-                            onClick={() => selectInvoice(invoice)}
-                            className={`bg-white border rounded-lg p-4 shadow-sm active:bg-gray-50 ${invoice.days_overdue > 0 ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                                }`}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-gray-900">{invoice.invoice_number}</h3>
-                                    <p className="text-sm text-gray-600">{invoice.distributor_name}</p>
-                                    <p className="text-sm text-gray-600">{invoice.city}</p>
-
-                                    <div className="flex items-center mt-2">
-                                        {invoice.days_overdue > 0 ? (
-                                            <div className="flex items-center text-red-600">
-                                                <AlertCircle className="w-4 h-4 mr-1" />
-                                                <span className="text-xs font-medium">
+                    <div className="space-y-3 p-4">
+                        {filteredInvoices.map((invoice) => (
+                            <div
+                                key={invoice.invoice_id}
+                                onClick={() => selectInvoice(invoice)}
+                                className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md active:bg-gray-50 cursor-pointer transition-all duration-200"
+                            >
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                            <FileText className="w-5 h-5 text-blue-600" />
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-gray-900">{invoice.invoice_number}</span>
+                                            {invoice.days_overdue > 0 && (
+                                                <span className="ml-2 px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full font-medium">
                                                     {invoice.days_overdue} days overdue
                                                 </span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center text-gray-500">
-                                                <Calendar className="w-4 h-4 mr-1" />
-                                                <span className="text-xs">
-                                                    Due: {new Date(invoice.due_date).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="text-right ml-4">
-                                    <div className="text-lg font-bold text-green-600">
-                                        ${parseFloat(invoice.balance_amount).toLocaleString()}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                        Total: ${parseFloat(invoice.total_amount).toLocaleString()}
-                                    </div>
-                                    {invoice.paid_amount > 0 && (
-                                        <div className="text-xs text-blue-600">
-                                            Paid: ${parseFloat(invoice.paid_amount).toLocaleString()}
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
+                                    <ArrowRight className="w-5 h-5 text-gray-400" />
+                                </div>
+                                
+                                <p className="text-sm text-gray-600 mb-3 font-medium">{invoice.distributor_name}</p>
+                                
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs text-gray-500">Balance Due</p>
+                                        <p className="text-xl font-bold text-blue-600">
+                                            {formatCurrency(invoice.balance_amount)}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-xs text-gray-500">Due Date</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                            {new Date(invoice.due_date).toLocaleDateString()}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        ))}
+                    </div>
                 )}
             </div>
         </div>
     );
 
     // Render step 2: Payment Details
-    const renderPaymentDetails = () => {
-        const suggestions = paymentService.calculatePaymentSuggestions(selectedInvoice.balance_amount);
+    const renderPaymentDetails = () => (
+        <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+                <div className="flex items-center space-x-3">
+                    <button 
+                        onClick={() => setCurrentStep(1)} 
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        <ArrowLeft className="w-5 h-5 text-gray-600" />
+                    </button>
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900">Record Payment</h2>
+                        <p className="text-sm text-gray-600">Enter payment details</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={onClose} 
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                    <X className="w-5 h-5 text-gray-600" />
+                </button>
+            </div>
 
-        return (
-            <div className="flex flex-col h-full">
-                {/* Header */}
-                <div className="bg-green-600 text-white p-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                            <button onClick={() => setCurrentStep(1)} className="p-1">
-                                <ArrowRight className="w-6 h-6 transform rotate-180" />
+            {/* Invoice Summary */}
+            <div className="p-4 bg-blue-50 border-b border-blue-200">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="font-semibold text-blue-900">{selectedInvoice?.invoice_number}</p>
+                        <p className="text-sm text-blue-700">{selectedInvoice?.distributor_name}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-lg font-bold text-blue-900">
+                            {formatCurrency(selectedInvoice?.balance_amount)}
+                        </p>
+                        <p className="text-sm text-blue-700">Balance Due</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Error Display */}
+            {error && (
+                <div className="p-4 bg-red-50 border-b border-red-200">
+                    <div className="flex items-center space-x-2">
+                        <AlertCircle className="w-5 h-5 text-red-600" />
+                        <p className="text-sm text-red-800 whitespace-pre-line">{error}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Payment Form */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50">
+                {/* Amount */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Amount *</label>
+                    <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={selectedInvoice?.balance_amount || ''}
+                            value={paymentData.amount}
+                            onChange={(e) => setPaymentData(prev => ({ ...prev, amount: e.target.value }))}
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-lg font-semibold"
+                            placeholder="0.00"
+                        />
+                    </div>
+                    
+                    {/* Amount Suggestions */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {getAmountSuggestions().map((suggestion, index) => (
+                            <button
+                                key={index}
+                                onClick={() => handleAmountSuggestion(suggestion.amount)}
+                                className="px-3 py-2 bg-blue-100 text-blue-700 text-sm rounded-lg hover:bg-blue-200 transition-colors font-medium"
+                            >
+                                {suggestion.label} ({formatCurrency(suggestion.amount)})
                             </button>
-                            <div>
-                                <h2 className="text-lg font-semibold">Payment Details</h2>
-                                <p className="text-sm text-green-200">{selectedInvoice.invoice_number}</p>
-                            </div>
-                        </div>
-                        <button onClick={onClose} className="p-1">
-                            <X className="w-6 h-6" />
-                        </button>
+                        ))}
                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                    {/* Invoice Summary */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h3 className="font-semibold mb-3">Invoice Summary</h3>
-                        <div className="space-y-2">
-                            <div className="flex justify-between">
-                                <span className="text-gray-600">Distributor:</span>
-                                <span className="font-medium">{selectedInvoice.distributor_name}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-600">Total Amount:</span>
-                                <span className="font-medium">${parseFloat(selectedInvoice.total_amount).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-600">Paid Amount:</span>
-                                <span className="font-medium text-green-600">${parseFloat(selectedInvoice.paid_amount).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between border-t pt-2">
-                                <span className="text-gray-600 font-medium">Balance Due:</span>
-                                <span className="font-bold text-lg text-red-600">${parseFloat(selectedInvoice.balance_amount).toLocaleString()}</span>
-                            </div>
-                        </div>
+                {/* Payment Method */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Payment Method *</label>
+                    <div className="space-y-3">
+                        {paymentMethods.map((method) => {
+                            const IconComponent = method.icon;
+                            const isSelected = paymentData.payment_method === method.value;
+                            return (
+                                <button
+                                    key={method.value}
+                                    onClick={() => setPaymentData(prev => ({ ...prev, payment_method: method.value }))}
+                                    className={`w-full flex items-center space-x-4 p-4 border-2 rounded-xl text-left transition-all duration-200 ${
+                                        isSelected
+                                            ? `border-${method.color}-500 bg-${method.color}-50 shadow-md`
+                                            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                                    }`}
+                                >
+                                    <div className={`p-2 rounded-lg ${
+                                        isSelected ? `bg-${method.color}-100` : 'bg-gray-100'
+                                    }`}>
+                                        <IconComponent className={`w-6 h-6 ${
+                                            isSelected ? `text-${method.color}-600` : 'text-gray-600'
+                                        }`} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className={`font-semibold ${
+                                            isSelected ? `text-${method.color}-900` : 'text-gray-900'
+                                        }`}>
+                                            {method.label}
+                                        </p>
+                                        <p className={`text-sm ${
+                                            isSelected ? `text-${method.color}-700` : 'text-gray-600'
+                                        }`}>
+                                            {method.description}
+                                        </p>
+                                    </div>
+                                    {isSelected && (
+                                        <div className={`p-1 rounded-full bg-${method.color}-500`}>
+                                            <Check className="w-4 h-4 text-white" />
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
+                </div>
 
-                    {/* Payment Amount */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h3 className="font-semibold mb-3">Payment Amount</h3>
-
-                        {/* Amount Input */}
-                        <div className="relative mb-3">
-                            <DollarSign className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                {/* Check Number and Image (if check selected) */}
+                {paymentData.payment_method === 'check' && (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Check Number *</label>
                             <input
-                                type="number"
-                                step="0.01"
-                                value={paymentData.amount}
-                                onChange={(e) => setPaymentData(prev => ({ ...prev, amount: e.target.value }))}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-lg font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
-                                placeholder="0.00"
+                                type="text"
+                                value={paymentData.check_number}
+                                onChange={(e) => setPaymentData(prev => ({ ...prev, check_number: e.target.value }))}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                placeholder="Enter check number"
                             />
                         </div>
-
-                        {/* Quick Amount Suggestions */}
-                        <div className="grid grid-cols-2 gap-2">
-                            {suggestions.map((suggestion, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => handleAmountSuggestion(suggestion.amount)}
-                                    className="p-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 active:bg-gray-100"
-                                >
-                                    <div className="font-medium">{suggestion.label}</div>
-                                    <div className="text-xs text-gray-500">{suggestion.description}</div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Payment Method */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h3 className="font-semibold mb-3">Payment Method</h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            {paymentMethods.map(method => {
-                                const Icon = {
-                                    Banknote,
-                                    FileText,
-                                    CreditCard,
-                                    Smartphone
-                                }[method.icon];
-
-                                return (
-                                    <button
-                                        key={method.value}
-                                        onClick={() => setPaymentData(prev => ({ ...prev, payment_method: method.value }))}
-                                        className={`p-3 border rounded-lg flex flex-col items-center text-center transition-colors ${paymentData.payment_method === method.value
-                                            ? 'border-green-500 bg-green-50 text-green-700'
-                                            : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                                            }`}
-                                    >
-                                        <Icon className="w-6 h-6 mb-2" />
-                                        <span className="font-medium text-sm">{method.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Method-specific fields */}
-                    {paymentData.payment_method === 'check' && (
-                        <div className="bg-white rounded-lg border border-gray-200 p-4">
-                            <h3 className="font-semibold mb-3">Check Details</h3>
-
-                            <div className="space-y-3">
-                                <input
-                                    type="text"
-                                    placeholder="Check Number"
-                                    value={paymentData.check_number}
-                                    onChange={(e) => setPaymentData(prev => ({ ...prev, check_number: e.target.value }))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                                />
-
-                                {/* Check Image Section */}
-                                <div className="space-y-3">
-                                    <label className="block text-sm font-medium text-gray-700">Check Photo</label>
-
-                                    {!capturedImage ? (
+                        
+                        {/* Check Image Capture */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Check Photo (Optional)</label>
+                            {capturedImage ? (
+                                <div className="relative">
+                                    <img 
+                                        src={capturedImage.url} 
+                                        alt="Check" 
+                                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-200"
+                                    />
+                                    <div className="absolute top-2 right-2 flex space-x-2">
                                         <button
-                                            onClick={startCamera}
-                                            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg flex items-center justify-center space-x-2 hover:bg-blue-700"
+                                            onClick={() => setShowCamera(true)}
+                                            className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 shadow-lg"
                                         >
-                                            <Camera className="w-5 h-5" />
-                                            <span>Take Photo of Check</span>
+                                            <RotateCcw className="w-4 h-4" />
                                         </button>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            <div className="relative border-2 border-green-500 rounded-lg overflow-hidden">
-                                                <img
-                                                    src={capturedImage.url}
-                                                    alt="Check"
-                                                    className="w-full h-40 object-cover"
-                                                />
-                                                <button
-                                                    onClick={removeCheckImage}
-                                                    className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
+                                        <button
+                                            onClick={removeCheckImage}
+                                            className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-lg"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    {uploading && (
+                                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                                            <div className="text-white text-center">
+                                                <Loader className="w-6 h-6 animate-spin mx-auto mb-2" />
+                                                <p className="text-sm">Uploading...</p>
                                             </div>
-
-                                            {uploadProgress > 0 && uploadProgress < 100 && (
-                                                <div className="text-center">
-                                                    <div className="text-sm text-blue-600 mb-1">Uploading... {uploadProgress}%</div>
-                                                    <div className="w-full bg-gray-200 rounded-full h-2">
-                                                        <div
-                                                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                                            style={{ width: `${uploadProgress}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {checkImageUrl && (
-                                                <div className="flex items-center text-green-600 text-sm">
-                                                    <CheckCircle className="w-4 h-4 mr-1" />
-                                                    Check photo uploaded successfully
-                                                </div>
-                                            )}
-
-                                            <button
-                                                onClick={startCamera}
-                                                className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2 hover:bg-gray-700"
-                                            >
-                                                <Camera className="w-4 h-4" />
-                                                <span>Retake Photo</span>
-                                            </button>
                                         </div>
                                     )}
                                 </div>
-                            </div>
+                            ) : (
+                                <button
+                                    onClick={() => setShowCamera(true)}
+                                    className="w-full flex items-center justify-center space-x-3 p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-700 transition-all duration-200"
+                                >
+                                    <Camera className="w-6 h-6" />
+                                    <span className="font-medium">Take Check Photo</span>
+                                </button>
+                            )}
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {paymentData.payment_method === 'bank_transfer' && (
-                        <div className="bg-white rounded-lg border border-gray-200 p-4">
-                            <h3 className="font-semibold mb-3">Bank Transfer Details</h3>
-                            <input
-                                type="text"
-                                placeholder="Bank Reference Number"
-                                value={paymentData.bank_reference}
-                                onChange={(e) => setPaymentData(prev => ({ ...prev, bank_reference: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            />
-                        </div>
-                    )}
+                {/* Bank Reference (if bank transfer selected) */}
+                {paymentData.payment_method === 'bank_transfer' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Bank Reference Number *</label>
+                        <input
+                            type="text"
+                            value={paymentData.bank_reference}
+                            onChange={(e) => setPaymentData(prev => ({ ...prev, bank_reference: e.target.value }))}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            placeholder="Enter bank reference or transaction ID"
+                        />
+                    </div>
+                )}
 
-                    {/* Payment Date */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h3 className="font-semibold mb-3">Payment Date</h3>
+                {/* Payment Date */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Date *</label>
+                    <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                         <input
                             type="date"
                             value={paymentData.payment_date}
+                            max={new Date().toISOString().split('T')[0]}
                             onChange={(e) => setPaymentData(prev => ({ ...prev, payment_date: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                    </div>
-
-                    {/* Notes */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h3 className="font-semibold mb-3">Notes (Optional)</h3>
-                        <textarea
-                            value={paymentData.notes}
-                            onChange={(e) => setPaymentData(prev => ({ ...prev, notes: e.target.value }))}
-                            rows="3"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            placeholder="Add payment notes..."
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                         />
                     </div>
                 </div>
 
-                {/* Action Button */}
-                <div className="bg-white border-t border-gray-200 p-4">
-                    <button
-                        onClick={submitPayment}
-                        disabled={loading || !paymentData.amount}
-                        className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold flex items-center justify-center space-x-2 disabled:opacity-50"
-                    >
-                        <DollarSign className="w-5 h-5" />
-                        <span>{loading ? 'Recording...' : 'Record Payment'}</span>
-                    </button>
+                {/* Notes */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+                    <textarea
+                        value={paymentData.notes}
+                        onChange={(e) => setPaymentData(prev => ({ ...prev, notes: e.target.value }))}
+                        rows={3}
+                        maxLength={500}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white resize-none"
+                        placeholder="Add any additional notes about this payment..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        {paymentData.notes?.length || 0}/500 characters
+                    </p>
                 </div>
             </div>
-        );
-    };
 
-    // Render step 3: Confirmation
-    const renderConfirmation = () => (
-        <div className="flex flex-col h-full items-center justify-center p-8 text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-                <CheckCircle className="w-12 h-12 text-green-600" />
-            </div>
-
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Payment Recorded!</h2>
-            <p className="text-gray-600 mb-4">
-                ${parseFloat(paymentData.amount).toLocaleString()} payment has been successfully recorded for invoice {selectedInvoice.invoice_number}
-            </p>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 w-full max-w-sm">
-                <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                        <span>Amount:</span>
-                        <span className="font-medium">${parseFloat(paymentData.amount).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>Method:</span>
-                        <span className="font-medium capitalize">{paymentData.payment_method.replace('_', ' ')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>Date:</span>
-                        <span className="font-medium">{new Date(paymentData.payment_date).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex justify-between border-t pt-2">
-                        <span>Remaining Balance:</span>
-                        <span className="font-medium">
-                            ${(parseFloat(selectedInvoice.balance_amount) - parseFloat(paymentData.amount)).toLocaleString()}
-                        </span>
-                    </div>
-                </div>
+            {/* Submit Button */}
+            <div className="p-4 border-t border-gray-200 bg-white">
+                <button
+                    onClick={submitPayment}
+                    disabled={loading || uploading}
+                    className="w-full bg-green-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3 transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                    {loading ? (
+                        <>
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                            <span>Recording Payment...</span>
+                        </>
+                    ) : (
+                        <>
+                            <Check className="w-6 h-6" />
+                            <span>Record Payment</span>
+                        </>
+                    )}
+                </button>
             </div>
         </div>
     );
 
-    // Camera Modal
-    const renderCameraModal = () => (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col">
-            <div className="flex-1 relative">
-                <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                />
+    // Render step 3: Confirmation
+    const renderConfirmation = () => (
+        <div className="flex flex-col h-full items-center justify-center p-8 text-center bg-gradient-to-b from-green-50 to-white">
+            <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                <CheckCircle className="w-16 h-16 text-green-600" />
+            </div>
 
-                <div className="absolute top-4 left-4 right-4 flex justify-between">
-                    <button
-                        onClick={stopCamera}
-                        className="bg-black bg-opacity-50 text-white p-3 rounded-full"
-                    >
-                        <X className="w-6 h-6" />
-                    </button>
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Payment Recorded!</h2>
+            <p className="text-gray-600 mb-6 text-lg max-w-md">
+                {formatCurrency(paymentData.amount)} payment has been successfully recorded for invoice {selectedInvoice?.invoice_number}
+            </p>
 
-                    <div className="bg-black bg-opacity-50 text-white px-3 py-2 rounded-lg">
-                        <span className="text-sm">Position check in frame</span>
+            <div className="bg-white border border-green-200 rounded-xl p-6 w-full max-w-md shadow-lg">
+                <div className="space-y-3 text-sm">
+                    <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Payment Amount:</span>
+                        <span className="font-bold text-green-700 text-lg">
+                            {formatCurrency(paymentData.amount)}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Payment Method:</span>
+                        <span className="font-semibold capitalize">
+                            {paymentData.payment_method.replace('_', ' ')}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Payment Date:</span>
+                        <span className="font-semibold">
+                            {new Date(paymentData.payment_date).toLocaleDateString()}
+                        </span>
+                    </div>
+                    {paymentData.check_number && (
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">Check Number:</span>
+                            <span className="font-semibold">{paymentData.check_number}</span>
+                        </div>
+                    )}
+                    {paymentData.bank_reference && (
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">Bank Reference:</span>
+                            <span className="font-semibold">{paymentData.bank_reference}</span>
+                        </div>
+                    )}
+                    <div className="border-t pt-3 mt-3">
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">Previous Balance:</span>
+                            <span className="font-semibold">
+                                {formatCurrency(selectedInvoice?.balance_amount)}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">Payment:</span>
+                            <span className="font-semibold text-green-600">
+                                -{formatCurrency(paymentData.amount)}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center text-lg font-bold border-t pt-2 mt-2">
+                            <span className="text-gray-900">Remaining Balance:</span>
+                            <span className={`${
+                                (parseFloat(selectedInvoice?.balance_amount || 0) - parseFloat(paymentData.amount)) <= 0 
+                                    ? 'text-green-600' 
+                                    : 'text-orange-600'
+                            }`}>
+                                {formatCurrency(
+                                    Math.max(
+                                        parseFloat(selectedInvoice?.balance_amount || 0) - parseFloat(paymentData.amount),
+                                        0
+                                    )
+                                )}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-black p-6 flex justify-center">
-                <button
-                    onClick={capturePhoto}
-                    className="w-16 h-16 bg-white rounded-full flex items-center justify-center"
-                >
-                    <div className="w-12 h-12 bg-gray-300 rounded-full"></div>
-                </button>
+            {/* Status Badge */}
+            <div className="mt-6">
+                {(parseFloat(selectedInvoice?.balance_amount || 0) - parseFloat(paymentData.amount)) <= 0 ? (
+                    <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full font-semibold">
+                        ✅ Invoice Fully Paid
+                    </div>
+                ) : (
+                    <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-full font-semibold">
+                        💰 Partial Payment Recorded
+                    </div>
+                )}
             </div>
 
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            {/* Action Buttons */}
+            <div className="mt-8 flex flex-col space-y-3 w-full max-w-md">
+                <button
+                    onClick={() => {
+                        // Reset form and go back to invoice selection
+                        setCurrentStep(1);
+                        setSelectedInvoice(null);
+                        setPaymentData({
+                            amount: '',
+                            payment_method: 'cash',
+                            payment_date: new Date().toISOString().split('T')[0],
+                            check_number: '',
+                            bank_reference: '',
+                            notes: '',
+                            check_image_url: ''
+                        });
+                        setCapturedImage(null);
+                        setError('');
+                        loadPendingInvoices();
+                    }}
+                    className="bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                    Record Another Payment
+                </button>
+                
+                <button
+                    onClick={() => {
+                        if (onSuccess) onSuccess('Payment recorded successfully');
+                        if (onClose) onClose();
+                    }}
+                    className="bg-gray-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+                >
+                    Close
+                </button>
+            </div>
         </div>
     );
 
     return (
-        <div className="fixed inset-0 bg-white z-50">
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
+            {/* Camera Modal */}
             {showCamera && (
                 <CameraCapture
                     title="Capture Check Photo"
@@ -661,6 +828,8 @@ const MobilePaymentCollection = ({ onClose, onSuccess, preSelectedInvoice = null
                     autoUpload={false}
                 />
             )}
+            
+            {/* Main Content */}
             {currentStep === 1 && renderInvoiceSelection()}
             {currentStep === 2 && renderPaymentDetails()}
             {currentStep === 3 && renderConfirmation()}

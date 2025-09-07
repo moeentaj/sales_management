@@ -5,7 +5,7 @@ export const paymentService = {
     // Get all payments with filtering and pagination
     getPayments: async (params = {}) => {
         const searchParams = new URLSearchParams();
-        
+
         Object.keys(params).forEach(key => {
             if (params[key] !== '' && params[key] !== null && params[key] !== undefined) {
                 searchParams.append(key, params[key]);
@@ -44,7 +44,7 @@ export const paymentService = {
     getPendingInvoices: async (distributorId = null, limit = 50) => {
         const params = new URLSearchParams({ limit });
         if (distributorId) params.append('distributor_id', distributorId);
-        
+
         const response = await api.get(`/payments/pending/invoices?${params}`);
         return response.data;
     },
@@ -77,7 +77,7 @@ export const paymentService = {
     uploadCheckImage: async (imageFile) => {
         const formData = new FormData();
         formData.append('image', imageFile);
-        
+
         const response = await api.post('/payments/upload-check-image', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
@@ -151,7 +151,7 @@ export const paymentService = {
 
             // Add action for pending collections
             if (pending.data.length > 0) {
-                const totalPending = pending.data.reduce((sum, invoice) => 
+                const totalPending = pending.data.reduce((sum, invoice) =>
                     sum + parseFloat(invoice.balance_amount), 0);
 
                 quickActions.push({
@@ -399,7 +399,7 @@ export const paymentService = {
         // Get optimized pending invoices for mobile
         getMobilePendingInvoices: async (limit = 20) => {
             const response = await paymentService.getPendingInvoices(null, limit);
-            
+
             // Sort by priority: overdue first, then by due date
             const sortedInvoices = response.data.sort((a, b) => {
                 if (a.days_overdue > 0 && b.days_overdue === 0) return -1;
@@ -417,7 +417,7 @@ export const paymentService = {
         handleCameraCapture: async (imageFile, paymentId = null) => {
             try {
                 const uploadResult = await paymentService.uploadCheckImage(imageFile);
-                
+
                 if (paymentId) {
                     // Update existing payment with check image
                     await paymentService.updatePayment(paymentId, {
@@ -484,6 +484,103 @@ export const paymentService = {
                 console.error('Error getting payment trends:', error);
                 return [];
             }
+        },
+
+        // Get default payment date (today in YYYY-MM-DD format)
+        getDefaultPaymentDate: () => {
+            const today = new Date();
+            return today.toISOString().split('T')[0];
+        },
+
+        // Format payment data for API submission
+        formatPaymentForAPI: (paymentData) => {
+            return {
+                amount: parseFloat(paymentData.amount),
+                payment_method: paymentData.payment_method,
+                payment_date: paymentData.payment_date,
+                check_number: paymentData.check_number || null,
+                bank_reference: paymentData.bank_reference || null,
+                notes: paymentData.notes || null,
+                check_image_url: paymentData.check_image_url || null
+            };
+        },
+
+        // Upload check image
+        uploadCheckImage: async (imageFile, paymentId = null) => {
+            const formData = new FormData();
+            formData.append('check_image', imageFile);
+
+            if (paymentId) {
+                formData.append('payment_id', paymentId);
+            }
+
+            const response = await api.post('/upload/check-image', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            return response.data;
+        },
+
+        // Calculate payment suggestions based on invoice amount
+        calculatePaymentSuggestions: (invoiceBalance) => {
+            const balance = parseFloat(invoiceBalance);
+
+            return [
+                { label: 'Full Amount', amount: balance },
+                { label: '50%', amount: Math.round(balance * 0.5) },
+                { label: '25%', amount: Math.round(balance * 0.25) },
+                { label: 'Custom', amount: null }
+            ];
+        },
+
+        // Format currency for display
+        formatCurrency: (amount) => {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(amount);
+        },
+
+        // Get payment method icon
+        getPaymentMethodIcon: (method) => {
+            const icons = {
+                cash: 'Banknote',
+                check: 'FileText',
+                bank_transfer: 'CreditCard',
+                online: 'Smartphone'
+            };
+            return icons[method] || 'DollarSign';
+        },
+
+        // Validate payment amount
+        validatePaymentAmount: (amount, invoiceBalance) => {
+            const numAmount = parseFloat(amount);
+            const numBalance = parseFloat(invoiceBalance);
+
+            if (isNaN(numAmount) || numAmount <= 0) {
+                return { isValid: false, error: 'Amount must be greater than 0' };
+            }
+
+            if (numAmount > numBalance) {
+                return { isValid: false, error: 'Amount cannot exceed invoice balance' };
+            }
+
+            return { isValid: true, error: null };
+        },
+
+        // Get status badge info
+        getStatusBadge: (status) => {
+            const statusMap = {
+                pending: { label: 'Pending', color: 'yellow' },
+                partial_paid: { label: 'Partial', color: 'blue' },
+                paid: { label: 'Paid', color: 'green' },
+                overdue: { label: 'Overdue', color: 'red' },
+                cancelled: { label: 'Cancelled', color: 'gray' }
+            };
+
+            return statusMap[status] || { label: status, color: 'gray' };
         }
     }
 };

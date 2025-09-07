@@ -6,7 +6,7 @@ export const uploadService = {
     uploadCheckImage: async (imageFile, paymentId = null, onProgress = null) => {
         const formData = new FormData();
         formData.append('check_image', imageFile);
-        
+
         if (paymentId) {
             formData.append('payment_id', paymentId);
         }
@@ -34,7 +34,7 @@ export const uploadService = {
     uploadProfileImage: async (imageFile, userId = null, onProgress = null) => {
         const formData = new FormData();
         formData.append('profile_image', imageFile);
-        
+
         if (userId) {
             formData.append('user_id', userId);
         }
@@ -61,16 +61,16 @@ export const uploadService = {
     // Upload staff documents
     uploadStaffDocuments: async (files, staffId = null, documentType = 'general', onProgress = null) => {
         const formData = new FormData();
-        
+
         // Add files to FormData
         files.forEach((file, index) => {
             formData.append('documents', file);
         });
-        
+
         if (staffId) {
             formData.append('staff_id', staffId);
         }
-        
+
         formData.append('document_type', documentType);
 
         const config = {
@@ -95,12 +95,12 @@ export const uploadService = {
     // General file upload
     uploadFiles: async (files, category = 'general', description = '', onProgress = null) => {
         const formData = new FormData();
-        
+
         // Add files to FormData
         files.forEach((file, index) => {
             formData.append('files', file);
         });
-        
+
         formData.append('category', category);
         if (description) {
             formData.append('description', description);
@@ -139,10 +139,10 @@ export const uploadService = {
                 };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                
+
                 if (videoElement) {
                     videoElement.srcObject = stream;
-                    
+
                     // Wait for video to be ready
                     return new Promise((resolve, reject) => {
                         videoElement.onloadedmetadata = () => {
@@ -153,12 +153,12 @@ export const uploadService = {
                         videoElement.onerror = () => reject(new Error('Video element error'));
                     });
                 }
-                
+
                 return stream;
             } catch (error) {
                 console.error('Camera access error:', error);
                 let errorMessage = 'Camera access failed';
-                
+
                 if (error.name === 'NotAllowedError') {
                     errorMessage = 'Camera permission denied. Please allow camera access and try again.';
                 } else if (error.name === 'NotFoundError') {
@@ -168,7 +168,7 @@ export const uploadService = {
                 } else if (error.name === 'NotReadableError') {
                     errorMessage = 'Camera is already in use by another application.';
                 }
-                
+
                 throw new Error(errorMessage);
             }
         },
@@ -323,7 +323,7 @@ export const uploadService = {
                 img.onload = () => {
                     // Calculate new dimensions
                     let { width, height } = img;
-                    
+
                     if (width > height) {
                         if (width > maxWidth) {
                             height = (height * maxWidth) / width;
@@ -369,7 +369,7 @@ export const uploadService = {
             const random = Math.random().toString(36).substring(2, 15);
             const extension = uploadService.utils.getFileExtension(originalName);
             const name = originalName.replace(/\.[^/.]+$/, ''); // Remove extension
-            
+
             return `${prefix}${name}_${timestamp}_${random}.${extension}`;
         }
     },
@@ -377,11 +377,11 @@ export const uploadService = {
     // Error handling
     handleUploadError: (error) => {
         console.error('Upload error:', error);
-        
+
         if (error.response) {
             // Server responded with error status
             const { status, data } = error.response;
-            
+
             switch (status) {
                 case 400:
                     return data.message || 'Invalid file or request';
@@ -417,23 +417,119 @@ export const uploadService = {
             setTotal: (bytes) => {
                 totalBytes = bytes;
             },
-            
+
             updateProgress: (bytes) => {
                 uploadedBytes = bytes;
                 const percentage = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : 0;
                 callbacks.forEach(callback => callback(percentage));
             },
-            
+
             onProgress: (callback) => {
                 callbacks.push(callback);
             },
-            
+
             reset: () => {
                 totalBytes = 0;
                 uploadedBytes = 0;
                 callbacks = [];
             }
         };
+    },
+    // Get default payment date (today in YYYY-MM-DD format)
+    getDefaultPaymentDate: () => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    },
+
+    // Format payment data for API submission
+    formatPaymentForAPI: (paymentData) => {
+        return {
+            amount: parseFloat(paymentData.amount),
+            payment_method: paymentData.payment_method,
+            payment_date: paymentData.payment_date,
+            check_number: paymentData.check_number || null,
+            bank_reference: paymentData.bank_reference || null,
+            notes: paymentData.notes || null,
+            check_image_url: paymentData.check_image_url || null
+        };
+    },
+
+    // Upload check image
+    uploadCheckImage: async (imageFile, paymentId = null) => {
+        const formData = new FormData();
+        formData.append('check_image', imageFile);
+
+        if (paymentId) {
+            formData.append('payment_id', paymentId);
+        }
+
+        const response = await api.post('/upload/check-image', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+
+        return response.data;
+    },
+
+    // Calculate payment suggestions based on invoice amount
+    calculatePaymentSuggestions: (invoiceBalance) => {
+        const balance = parseFloat(invoiceBalance);
+
+        return [
+            { label: 'Full Amount', amount: balance },
+            { label: '50%', amount: Math.round(balance * 0.5) },
+            { label: '25%', amount: Math.round(balance * 0.25) },
+            { label: 'Custom', amount: null }
+        ];
+    },
+
+    // Format currency for display
+    formatCurrency: (amount) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD'
+        }).format(amount);
+    },
+
+    // Get payment method icon
+    getPaymentMethodIcon: (method) => {
+        const icons = {
+            cash: 'Banknote',
+            check: 'FileText',
+            bank_transfer: 'CreditCard',
+            online: 'Smartphone'
+        };
+        return icons[method] || 'DollarSign';
+    },
+
+    // Validate payment amount
+    validatePaymentAmount: (amount, invoiceBalance) => {
+        const numAmount = parseFloat(amount);
+        const numBalance = parseFloat(invoiceBalance);
+
+        if (isNaN(numAmount) || numAmount <= 0) {
+            return { isValid: false, error: 'Amount must be greater than 0' };
+        }
+
+        if (numAmount > numBalance) {
+            return { isValid: false, error: 'Amount cannot exceed invoice balance' };
+        }
+
+        return { isValid: true, error: null };
+    },
+
+    // Get status badge info
+    getStatusBadge: (status) => {
+        const statusMap = {
+            pending: { label: 'Pending', color: 'yellow' },
+            partial_paid: { label: 'Partial', color: 'blue' },
+            paid: { label: 'Paid', color: 'green' },
+            overdue: { label: 'Overdue', color: 'red' },
+            cancelled: { label: 'Cancelled', color: 'gray' }
+        };
+
+        return statusMap[status] || { label: status, color: 'gray' };
     }
 };
 
