@@ -848,37 +848,37 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
         if (userRole === 'admin') {
             statsQuery = `
                 SELECT 
-                    COUNT(*) as total_invoices,
-                    COUNT(*) FILTER (WHERE status = 'draft') as draft_invoices,
-                    COUNT(*) FILTER (WHERE status = 'sent') as sent_invoices,
-                    COUNT(*) FILTER (WHERE status = 'partial_paid') as partial_paid_invoices,
-                    COUNT(*) FILTER (WHERE status = 'paid') as paid_invoices,
-                    COUNT(*) FILTER (WHERE status = 'overdue') as overdue_invoices,
-                    COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_invoices,
-                    COALESCE(SUM(total_amount), 0) as total_amount,
-                    COALESCE(SUM(paid_amount), 0) as total_paid,
-                    COALESCE(SUM(total_amount - paid_amount), 0) FILTER (WHERE status != 'cancelled') as total_outstanding,
-                    COALESCE(AVG(total_amount), 0) as average_invoice_amount,
-                    COUNT(*) FILTER (WHERE invoice_date = CURRENT_DATE) as today_invoices,
-                    COALESCE(SUM(total_amount), 0) FILTER (WHERE invoice_date = CURRENT_DATE) as today_amount
+                    COUNT(*) AS total_invoices,
+                    SUM(CASE WHEN status = 'draft'         THEN 1 ELSE 0 END) AS draft_invoices,
+                    SUM(CASE WHEN status = 'sent'          THEN 1 ELSE 0 END) AS sent_invoices,
+                    SUM(CASE WHEN status = 'partial_paid'  THEN 1 ELSE 0 END) AS partial_paid_invoices,
+                    SUM(CASE WHEN status = 'paid'          THEN 1 ELSE 0 END) AS paid_invoices,
+                    SUM(CASE WHEN status = 'overdue'       THEN 1 ELSE 0 END) AS overdue_invoices,
+                    SUM(CASE WHEN status = 'cancelled'     THEN 1 ELSE 0 END) AS cancelled_invoices,
+                    COALESCE(SUM(total_amount), 0) AS total_amount,
+                    COALESCE(SUM(paid_amount), 0)  AS total_paid,
+                    COALESCE(SUM(CASE WHEN status <> 'cancelled' THEN (total_amount - paid_amount) ELSE 0 END), 0) AS total_outstanding,
+                    COALESCE(AVG(total_amount), 0) AS average_invoice_amount,
+                    SUM(CASE WHEN DATE(invoice_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS today_invoices,
+                    COALESCE(SUM(CASE WHEN DATE(invoice_date) = CURRENT_DATE THEN total_amount ELSE 0 END), 0) AS today_amount
                 FROM invoices
             `;
         } else {
             statsQuery = `
                 SELECT 
-                    COUNT(*) as total_invoices,
-                    COUNT(*) FILTER (WHERE status = 'draft') as draft_invoices,
-                    COUNT(*) FILTER (WHERE status = 'sent') as sent_invoices,
-                    COUNT(*) FILTER (WHERE status = 'partial_paid') as partial_paid_invoices,
-                    COUNT(*) FILTER (WHERE status = 'paid') as paid_invoices,
-                    COUNT(*) FILTER (WHERE status = 'overdue') as overdue_invoices,
-                    COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_invoices,
-                    COALESCE(SUM(total_amount), 0) as total_amount,
-                    COALESCE(SUM(paid_amount), 0) as total_paid,
-                    COALESCE(SUM(total_amount - paid_amount), 0) FILTER (WHERE status != 'cancelled') as total_outstanding,
-                    COALESCE(AVG(total_amount), 0) as average_invoice_amount,
-                    COUNT(*) FILTER (WHERE invoice_date = CURRENT_DATE) as today_invoices,
-                    COALESCE(SUM(total_amount), 0) FILTER (WHERE invoice_date = CURRENT_DATE) as today_amount
+                    COUNT(*) AS total_invoices,
+                    SUM(CASE WHEN status = 'draft'         THEN 1 ELSE 0 END) AS draft_invoices,
+                    SUM(CASE WHEN status = 'sent'          THEN 1 ELSE 0 END) AS sent_invoices,
+                    SUM(CASE WHEN status = 'partial_paid'  THEN 1 ELSE 0 END) AS partial_paid_invoices,
+                    SUM(CASE WHEN status = 'paid'          THEN 1 ELSE 0 END) AS paid_invoices,
+                    SUM(CASE WHEN status = 'overdue'       THEN 1 ELSE 0 END) AS overdue_invoices,
+                    SUM(CASE WHEN status = 'cancelled'     THEN 1 ELSE 0 END) AS cancelled_invoices,
+                    COALESCE(SUM(total_amount), 0) AS total_amount,
+                    COALESCE(SUM(paid_amount), 0)  AS total_paid,
+                    COALESCE(SUM(CASE WHEN status <> 'cancelled' THEN (total_amount - paid_amount) ELSE 0 END), 0) AS total_outstanding,
+                    COALESCE(AVG(total_amount), 0) AS average_invoice_amount,
+                    SUM(CASE WHEN DATE(invoice_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS today_invoices,
+                    COALESCE(SUM(CASE WHEN DATE(invoice_date) = CURRENT_DATE THEN total_amount ELSE 0 END), 0) AS today_amount
                 FROM invoices
                 WHERE sales_staff_id = $1
             `;

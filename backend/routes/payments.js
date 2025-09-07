@@ -157,8 +157,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
             paymentQuery += ` AND p.collected_by = $2`;
         }
 
-        const params = req.user.role === 'sales_staff' 
-            ? [paymentId, req.user.user_id] 
+        const params = req.user.role === 'sales_staff'
+            ? [paymentId, req.user.user_id]
             : [paymentId];
 
         const result = await query(paymentQuery, params);
@@ -187,7 +187,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // POST /api/payments - Record new payment
 router.post('/', authenticateToken, createPaymentValidation, async (req, res) => {
     const client = await getClient();
-    
+
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -253,7 +253,7 @@ router.post('/', authenticateToken, createPaymentValidation, async (req, res) =>
              RETURNING payment_id, payment_date, amount, payment_method, check_number,
                        bank_reference, notes, created_at`,
             [invoice_id, payment_date || new Date(), amount, payment_method,
-             check_number, check_image_url, bank_reference, req.user.user_id, notes]
+                check_number, check_image_url, bank_reference, req.user.user_id, notes]
         );
 
         const payment = paymentResult.rows[0];
@@ -286,7 +286,7 @@ router.post('/', authenticateToken, createPaymentValidation, async (req, res) =>
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Create payment error:', error);
-        
+
         res.status(500).json({
             success: false,
             message: 'Internal server error'
@@ -299,7 +299,7 @@ router.post('/', authenticateToken, createPaymentValidation, async (req, res) =>
 // PUT /api/payments/:id - Update payment
 router.put('/:id', authenticateToken, updatePaymentValidation, async (req, res) => {
     const client = await getClient();
-    
+
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -355,7 +355,7 @@ router.put('/:id', authenticateToken, updatePaymentValidation, async (req, res) 
             // Validate new amount doesn't exceed invoice total
             const otherPaymentsTotal = parseFloat(existingPayment.paid_amount) - parseFloat(existingPayment.current_amount);
             const newTotalPaid = otherPaymentsTotal + parseFloat(amount);
-            
+
             if (newTotalPaid > parseFloat(existingPayment.total_amount)) {
                 await client.query('ROLLBACK');
                 return res.status(400).json({
@@ -439,7 +439,7 @@ router.put('/:id', authenticateToken, updatePaymentValidation, async (req, res) 
 // DELETE /api/payments/:id - Cancel payment
 router.delete('/:id', authenticateToken, async (req, res) => {
     const client = await getClient();
-    
+
     try {
         const paymentId = req.params.id;
 
@@ -562,7 +562,7 @@ router.get('/pending/invoices', authenticateToken, async (req, res) => {
 // POST /api/payments/bulk - Record multiple payments
 router.post('/bulk', authenticateToken, async (req, res) => {
     const client = await getClient();
-    
+
     try {
         const { payments } = req.body;
 
@@ -584,7 +584,7 @@ router.post('/bulk', authenticateToken, async (req, res) => {
 
         for (let i = 0; i < payments.length; i++) {
             const paymentData = payments[i];
-            
+
             try {
                 // Validate required fields
                 if (!paymentData.invoice_id || !paymentData.amount || !paymentData.payment_method) {
@@ -643,9 +643,9 @@ router.post('/bulk', authenticateToken, async (req, res) => {
                      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                      RETURNING payment_id, payment_date, amount, payment_method`,
                     [paymentData.invoice_id, paymentData.payment_date || new Date(),
-                     paymentData.amount, paymentData.payment_method, paymentData.check_number,
-                     paymentData.check_image_url, paymentData.bank_reference, req.user.user_id,
-                     paymentData.notes]
+                    paymentData.amount, paymentData.payment_method, paymentData.check_number,
+                    paymentData.check_image_url, paymentData.bank_reference, req.user.user_id,
+                    paymentData.notes]
                 );
 
                 results.successful++;
@@ -691,34 +691,34 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
 
         if (userRole === 'admin') {
             statsQuery = `
-                SELECT 
-                    COUNT(*) as total_payments,
-                    COALESCE(SUM(amount), 0) as total_amount_collected,
-                    COUNT(*) FILTER (WHERE payment_method = 'cash') as cash_payments,
-                    COUNT(*) FILTER (WHERE payment_method = 'check') as check_payments,
-                    COUNT(*) FILTER (WHERE payment_method = 'bank_transfer') as bank_transfer_payments,
-                    COUNT(*) FILTER (WHERE payment_method = 'online') as online_payments,
-                    COALESCE(SUM(amount), 0) FILTER (WHERE payment_date = CURRENT_DATE) as today_collections,
-                    COUNT(*) FILTER (WHERE payment_date = CURRENT_DATE) as today_payment_count,
-                    COALESCE(SUM(amount), 0) FILTER (WHERE payment_date >= CURRENT_DATE - INTERVAL '7 days') as week_collections,
-                    COALESCE(SUM(amount), 0) FILTER (WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days') as month_collections,
-                    COALESCE(AVG(amount), 0) as average_payment_amount
+                SELECT
+                    COUNT(*) AS total_payments,
+                    COALESCE(SUM(amount), 0) AS total_amount_collected,
+                    SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) AS cash_payments,
+                    SUM(CASE WHEN payment_method = 'check' THEN 1 ELSE 0 END) AS check_payments,
+                    SUM(CASE WHEN payment_method = 'bank_transfer' THEN 1 ELSE 0 END) AS bank_transfer_payments,
+                    SUM(CASE WHEN payment_method = 'online' THEN 1 ELSE 0 END) AS online_payments,
+                    COALESCE(SUM(CASE WHEN DATE(payment_date) = CURRENT_DATE THEN amount ELSE 0 END), 0) AS today_collections,
+                    SUM(CASE WHEN DATE(payment_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS today_payment_count,
+                    COALESCE(SUM(CASE WHEN DATE(payment_date) >= CURRENT_DATE - INTERVAL '7 days' THEN amount ELSE 0 END), 0) AS week_collections,
+                    COALESCE(SUM(CASE WHEN DATE(payment_date) >= CURRENT_DATE - INTERVAL '30 days' THEN amount ELSE 0 END), 0) AS month_collections,
+                    COALESCE(AVG(amount), 0) AS average_payment_amount
                 FROM payments
             `;
         } else {
             statsQuery = `
                 SELECT 
-                    COUNT(*) as total_payments,
-                    COALESCE(SUM(amount), 0) as total_amount_collected,
-                    COUNT(*) FILTER (WHERE payment_method = 'cash') as cash_payments,
-                    COUNT(*) FILTER (WHERE payment_method = 'check') as check_payments,
-                    COUNT(*) FILTER (WHERE payment_method = 'bank_transfer') as bank_transfer_payments,
-                    COUNT(*) FILTER (WHERE payment_method = 'online') as online_payments,
-                    COALESCE(SUM(amount), 0) FILTER (WHERE payment_date = CURRENT_DATE) as today_collections,
-                    COUNT(*) FILTER (WHERE payment_date = CURRENT_DATE) as today_payment_count,
-                    COALESCE(SUM(amount), 0) FILTER (WHERE payment_date >= CURRENT_DATE - INTERVAL '7 days') as week_collections,
-                    COALESCE(SUM(amount), 0) FILTER (WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days') as month_collections,
-                    COALESCE(AVG(amount), 0) as average_payment_amount
+                    COUNT(*) AS total_payments,
+                        COALESCE(SUM(amount), 0) AS total_amount_collected,
+                        SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) AS cash_payments,
+                        SUM(CASE WHEN payment_method = 'check' THEN 1 ELSE 0 END) AS check_payments,
+                        SUM(CASE WHEN payment_method = 'bank_transfer' THEN 1 ELSE 0 END) AS bank_transfer_payments,
+                        SUM(CASE WHEN payment_method = 'online' THEN 1 ELSE 0 END) AS online_payments,
+                        COALESCE(SUM(CASE WHEN DATE(payment_date) = CURRENT_DATE THEN amount ELSE 0 END), 0) AS today_collections,
+                        SUM(CASE WHEN DATE(payment_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS today_payment_count,
+                        COALESCE(SUM(CASE WHEN DATE(payment_date) >= CURRENT_DATE - INTERVAL '7 days' THEN amount ELSE 0 END), 0) AS week_collections,
+                        COALESCE(SUM(CASE WHEN DATE(payment_date) >= CURRENT_DATE - INTERVAL '30 days' THEN amount ELSE 0 END), 0) AS month_collections,
+                        COALESCE(AVG(amount), 0) AS average_payment_amount
                 FROM payments
                 WHERE collected_by = $1
             `;
@@ -745,7 +745,7 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
 router.get('/methods/summary', authenticateToken, async (req, res) => {
     try {
         const period = req.query.period || 'month'; // today, week, month, year, all
-        
+
         let dateFilter = '';
         switch (period) {
             case 'today':
@@ -858,7 +858,7 @@ router.post('/upload-check-image', authenticateToken, async (req, res) => {
         // This endpoint would typically handle file upload
         // For now, return placeholder response
         // TODO: Implement file upload with multer and AWS S3/local storage
-        
+
         res.json({
             success: true,
             message: 'Check image upload endpoint ready for implementation',
@@ -930,7 +930,7 @@ router.get('/export', authenticateToken, async (req, res) => {
 
         // Convert to CSV format
         const csvHeaders = [
-            'Payment ID', 'Date', 'Amount', 'Method', 'Check Number', 
+            'Payment ID', 'Date', 'Amount', 'Method', 'Check Number',
             'Bank Reference', 'Notes', 'Invoice Number', 'Invoice Total',
             'Distributor', 'City', 'Collected By'
         ];
