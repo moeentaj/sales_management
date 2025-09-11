@@ -1,7 +1,7 @@
 // frontend/src/pages/DashboardPage.js - Fixed version
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, FileText, DollarSign, TrendingUp, 
+import {
+  Users, FileText, DollarSign, TrendingUp,
   AlertCircle, CheckCircle, Clock, Calendar
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -73,10 +73,15 @@ const DashboardStats = () => {
         <div className="ml-4 flex-1">
           <p className="text-sm font-medium text-gray-600">{title}</p>
           <p className="text-2xl font-bold text-gray-900">
-            {typeof value === 'number' && title.toLowerCase().includes('amount') || title.toLowerCase().includes('revenue') || title.toLowerCase().includes('outstanding')
+            {typeof value === 'number' && (
+              title.toLowerCase().includes('amount') ||
+              title.toLowerCase().includes('revenue') ||
+              title.toLowerCase().includes('outstanding')
+            )
               ? `$${value.toLocaleString()}`
-              : value?.toLocaleString ? value.toLocaleString() : value
-            }
+              : value != null && value.toLocaleString
+                ? value.toLocaleString()
+                : value ?? '—'}
           </p>
           {subtitle && (
             <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
@@ -103,7 +108,7 @@ const DashboardStats = () => {
           color="bg-blue-500"
           subtitle="All time"
         />
-        
+
         <StatCard
           title="Total Revenue"
           value={stats.total_revenue}
@@ -111,7 +116,7 @@ const DashboardStats = () => {
           color="bg-green-500"
           subtitle="All time"
         />
-        
+
         <StatCard
           title="Outstanding Amount"
           value={stats.total_outstanding}
@@ -119,7 +124,7 @@ const DashboardStats = () => {
           color="bg-yellow-500"
           subtitle="Pending payments"
         />
-        
+
         <StatCard
           title="Overdue Invoices"
           value={stats.overdue_invoices}
@@ -138,7 +143,7 @@ const DashboardStats = () => {
           color="bg-indigo-500"
           subtitle="Invoices created"
         />
-        
+
         <StatCard
           title="Paid Invoices"
           value={stats.paid_invoices}
@@ -146,7 +151,7 @@ const DashboardStats = () => {
           color="bg-green-600"
           subtitle="Completed payments"
         />
-        
+
         <StatCard
           title="Pending Invoices"
           value={stats.pending_invoices}
@@ -166,7 +171,7 @@ const DashboardStats = () => {
             color="bg-purple-500"
             subtitle="Active customers"
           />
-          
+
           <StatCard
             title="Total Products"
             value={stats.total_products}
@@ -191,7 +196,7 @@ const DashboardPage = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Sales Dashboard</h2>
           <p className="text-gray-600 mb-6">Welcome back, {user.full_name}!</p>
-          
+
           {/* Quick Actions for Sales Staff */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <a
@@ -202,7 +207,7 @@ const DashboardPage = () => {
               <div className="font-semibold">Create Invoice</div>
               <div className="text-sm opacity-90">New sale entry</div>
             </a>
-            
+
             <a
               href="/payments?action=collect"
               className="bg-green-600 text-white p-4 rounded-lg text-center hover:bg-green-700 transition-colors"
@@ -228,7 +233,7 @@ const DashboardPage = () => {
                 <p className="text-sm text-gray-600">Distributor ABC Corp - $1,250</p>
               </div>
             </div>
-            
+
             <div className="flex items-center p-3 bg-gray-50 rounded-lg">
               <FileText className="w-5 h-5 text-blue-500 mr-3" />
               <div>
@@ -236,7 +241,7 @@ const DashboardPage = () => {
                 <p className="text-sm text-gray-600">Distributor XYZ Ltd - $850</p>
               </div>
             </div>
-            
+
             <div className="flex items-center p-3 bg-gray-50 rounded-lg">
               <AlertCircle className="w-5 h-5 text-orange-500 mr-3" />
               <div>
@@ -276,7 +281,7 @@ const DashboardPage = () => {
               <div className="text-sm text-gray-600">New invoice</div>
             </div>
           </a>
-          
+
           <a
             href="/users?action=create"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
@@ -287,7 +292,7 @@ const DashboardPage = () => {
               <div className="text-sm text-gray-600">New staff member</div>
             </div>
           </a>
-          
+
           <a
             href="/distributors?action=create"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
@@ -298,7 +303,7 @@ const DashboardPage = () => {
               <div className="text-sm text-gray-600">New customer</div>
             </div>
           </a>
-          
+
           <a
             href="/reports"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
@@ -323,7 +328,7 @@ const DashboardPage = () => {
               <p className="text-sm text-gray-600">Invoice INV-000123 - $1,250 • 2 hours ago</p>
             </div>
           </div>
-          
+
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
             <FileText className="w-5 h-5 text-blue-500 mr-3 flex-shrink-0" />
             <div className="flex-1">
@@ -331,7 +336,7 @@ const DashboardPage = () => {
               <p className="text-sm text-gray-600">Invoice INV-000124 for XYZ Ltd - $850 • 4 hours ago</p>
             </div>
           </div>
-          
+
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
             <Users className="w-5 h-5 text-purple-500 mr-3 flex-shrink-0" />
             <div className="flex-1">
@@ -339,7 +344,7 @@ const DashboardPage = () => {
               <p className="text-sm text-gray-600">DEF Industries added by Admin • 6 hours ago</p>
             </div>
           </div>
-          
+
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
             <AlertCircle className="w-5 h-5 text-orange-500 mr-3 flex-shrink-0" />
             <div className="flex-1">

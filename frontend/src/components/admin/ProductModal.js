@@ -1,11 +1,13 @@
-// frontend/src/components/admin/ProductModal.js - Complete Product Management Modal
+// frontend/src/components/admin/ProductModal.js - Updated with Category Management
 import React, { useState, useEffect } from 'react';
 import {
     X, Save, Package, DollarSign, Tag, FileText, 
     AlertCircle, CheckCircle, Loader, Plus, Minus,
-    BarChart3, TrendingUp, Calendar, Eye, Upload
+    BarChart3, TrendingUp, Calendar, Eye, Upload, Settings
 } from 'lucide-react';
 import { productService } from '../../services/productService';
+import { categoryService } from '../../services/categoryService';
+import CategoryModal from './CategoryModal';
 
 const ProductModal = ({ 
     product = null, 
@@ -18,10 +20,22 @@ const ProductModal = ({
     const [errors, setErrors] = useState({});
     const [activeTab, setActiveTab] = useState('basic'); // basic, pricing, details
 
+    // Category management states
+    const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [allCategories, setAllCategories] = useState(categories);
+
     // Form data
     const [formData, setFormData] = useState(
         product || productService.utils.getDefaultProductData()
     );
+
+    // Load categories when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            loadCategories();
+        }
+    }, [isOpen]);
 
     // Reset form when product changes
     useEffect(() => {
@@ -33,6 +47,17 @@ const ProductModal = ({
         setErrors({});
         setActiveTab('basic');
     }, [product, isOpen]);
+
+    const loadCategories = async () => {
+        try {
+            const response = await categoryService.getActiveCategoriesSimple();
+            if (response.success) {
+                setAllCategories(response.data);
+            }
+        } catch (error) {
+            console.error('Error loading categories:', error);
+        }
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -51,7 +76,7 @@ const ProductModal = ({
     };
 
     const validateForm = () => {
-        const validationErrors = productService.utils.validateProduct(formData, !!product);
+        const validationErrors = productService.utils.validateProduct(formData, !product);
         setErrors(validationErrors);
         return Object.keys(validationErrors).length === 0;
     };
@@ -90,79 +115,117 @@ const ProductModal = ({
         handleInputChange('product_code', code);
     };
 
+    const handleCategorySuccess = () => {
+        loadCategories(); // Reload categories after add/edit
+        setShowCategoryModal(false);
+        setSelectedCategory(null);
+    };
+
+    const handleAddCategory = () => {
+        setSelectedCategory(null);
+        setShowCategoryModal(true);
+    };
+
+    const handleEditCategory = (categoryName) => {
+        const category = allCategories.find(cat => cat.value === categoryName);
+        if (category) {
+            setSelectedCategory(category);
+            setShowCategoryModal(true);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <Package className="w-6 h-6 text-blue-600" />
+        <>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                        <div className="flex items-center space-x-3">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <Package className="w-6 h-6 text-blue-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-semibold text-gray-900">
+                                    {product ? 'Edit Product' : 'Add New Product'}
+                                </h2>
+                                <p className="text-sm text-gray-500">
+                                    {product ? 
+                                        'Update product information and settings' : 
+                                        'Create a new product for your catalog'
+                                    }
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-900">
-                                {product ? 'Edit Product' : 'Add New Product'}
-                            </h2>
-                            <p className="text-sm text-gray-500">
-                                {product ? `Product ID: ${product.product_id}` : 'Create a new product in your catalog'}
-                            </p>
-                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <X className="w-5 h-5 text-gray-400" />
+                        </button>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                        <X className="w-5 h-5 text-gray-500" />
-                    </button>
-                </div>
 
-                {/* Tabs */}
-                <div className="border-b border-gray-200">
-                    <nav className="flex px-6">
-                        {[
-                            { id: 'basic', label: 'Basic Info', icon: Package },
-                            { id: 'pricing', label: 'Pricing', icon: DollarSign },
-                            { id: 'details', label: 'Details', icon: FileText }
-                        ].map(tab => (
+                    {/* Tabs */}
+                    <div className="flex border-b border-gray-200">
+                        <button
+                            onClick={() => setActiveTab('basic')}
+                            className={`px-6 py-3 text-sm font-medium transition-colors ${
+                                activeTab === 'basic'
+                                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <Package className="w-4 h-4 mr-2 inline" />
+                            Basic Info
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('pricing')}
+                            className={`px-6 py-3 text-sm font-medium transition-colors ${
+                                activeTab === 'pricing'
+                                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <DollarSign className="w-4 h-4 mr-2 inline" />
+                            Pricing
+                        </button>
+                        {product && (
                             <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center space-x-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
-                                    activeTab === tab.id
-                                        ? 'border-blue-500 text-blue-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                onClick={() => setActiveTab('details')}
+                                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                                    activeTab === 'details'
+                                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                                        : 'text-gray-500 hover:text-gray-700'
                                 }`}
                             >
-                                <tab.icon className="w-4 h-4" />
-                                <span>{tab.label}</span>
+                                <BarChart3 className="w-4 h-4 mr-2 inline" />
+                                Details
                             </button>
-                        ))}
-                    </nav>
-                </div>
+                        )}
+                    </div>
 
-                {/* Form Content */}
-                <form onSubmit={handleSubmit} className="flex-1 overflow-hidden">
-                    <div className="p-6 max-h-96 overflow-y-auto">
-                        {/* Error Display */}
+                    {/* Content */}
+                    <div className="p-6 max-h-[60vh] overflow-y-auto">
+                        {/* Error Alert */}
                         {errors.submit && (
-                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                                <div className="flex items-center space-x-2">
-                                    <AlertCircle className="w-5 h-5 text-red-500" />
-                                    <p className="text-red-800">{errors.submit}</p>
+                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+                                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                                <div>
+                                    <h4 className="text-sm font-medium text-red-800">Error</h4>
+                                    <p className="text-sm text-red-700">{errors.submit}</p>
                                 </div>
                             </div>
                         )}
 
-                        {/* Basic Info Tab */}
+                        {/* Basic Information Tab */}
                         {activeTab === 'basic' && (
-                            <div className="space-y-6">
+                            <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {/* Product Name */}
-                                    <div>
+                                    <div className="md:col-span-2">
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Product Name *
+                                            Product Name <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="text"
@@ -172,16 +235,17 @@ const ProductModal = ({
                                                 errors.product_name ? 'border-red-300' : 'border-gray-300'
                                             }`}
                                             placeholder="Enter product name"
+                                            required
                                         />
                                         {errors.product_name && (
-                                            <p className="mt-1 text-sm text-red-600">{errors.product_name}</p>
+                                            <p className="mt-1 text-xs text-red-600">{errors.product_name}</p>
                                         )}
                                     </div>
 
                                     {/* Product Code */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Product Code *
+                                            Product Code
                                         </label>
                                         <div className="flex space-x-2">
                                             <input
@@ -191,39 +255,59 @@ const ProductModal = ({
                                                 className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                                     errors.product_code ? 'border-red-300' : 'border-gray-300'
                                                 }`}
-                                                placeholder="Enter product code"
+                                                placeholder="Auto-generated or custom"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={handleGenerateCode}
-                                                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                                                title="Generate Code"
+                                                className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                                                title="Generate product code"
                                             >
                                                 <Plus className="w-4 h-4" />
                                             </button>
                                         </div>
                                         {errors.product_code && (
-                                            <p className="mt-1 text-sm text-red-600">{errors.product_code}</p>
+                                            <p className="mt-1 text-xs text-red-600">{errors.product_code}</p>
                                         )}
                                     </div>
 
-                                    {/* Category */}
+                                    {/* Category with Management */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Category
                                         </label>
-                                        <select
-                                            value={formData.category}
-                                            onChange={(e) => handleInputChange('category', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        >
-                                            <option value="">Select category</option>
-                                            {categories.map(category => (
-                                                <option key={category} value={category}>
-                                                    {category}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="flex space-x-2">
+                                            <select
+                                                value={formData.category}
+                                                onChange={(e) => handleInputChange('category', e.target.value)}
+                                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            >
+                                                <option value="">Select category</option>
+                                                {allCategories.map(category => (
+                                                    <option key={category.id || category.value} value={category.value}>
+                                                        {category.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={handleAddCategory}
+                                                className="px-3 py-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
+                                                title="Add new category"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                            </button>
+                                            {formData.category && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleEditCategory(formData.category)}
+                                                    className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                                                    title="Manage categories"
+                                                >
+                                                    <Settings className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Unit of Measure */}
@@ -242,9 +326,37 @@ const ProductModal = ({
                                             <option value="meter">Meter</option>
                                             <option value="box">Box</option>
                                             <option value="dozen">Dozen</option>
-                                            <option value="pack">Pack</option>
                                         </select>
                                     </div>
+
+                                    {/* Status Toggle (only for edit) */}
+                                    {product && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Status
+                                            </label>
+                                            <div className="flex items-center space-x-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleInputChange('is_active', !formData.is_active)}
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                                        formData.is_active ? 'bg-blue-600' : 'bg-gray-200'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                            formData.is_active ? 'translate-x-6' : 'translate-x-1'
+                                                        }`}
+                                                    />
+                                                </button>
+                                                <span className={`text-sm font-medium ${
+                                                    formData.is_active ? 'text-blue-600' : 'text-gray-500'
+                                                }`}>
+                                                    {formData.is_active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Description */}
@@ -253,30 +365,19 @@ const ProductModal = ({
                                         Description
                                     </label>
                                     <textarea
-                                        value={formData.description}
+                                        value={formData.description || ''}
                                         onChange={(e) => handleInputChange('description', e.target.value)}
                                         rows={3}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        placeholder="Enter product description"
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                            errors.description ? 'border-red-300' : 'border-gray-300'
+                                        }`}
+                                        placeholder="Product description (optional)"
                                     />
+                                    {errors.description && (
+                                        <p className="mt-1 text-xs text-red-600">{errors.description}</p>
+                                    )}
                                 </div>
-
-                                {/* Status */}
-                                <div>
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.is_active}
-                                            onChange={(e) => handleInputChange('is_active', e.target.checked)}
-                                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                        />
-                                        <span className="text-sm font-medium text-gray-700">Active Product</span>
-                                    </label>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        Inactive products won't appear in invoices or sales
-                                    </p>
-                                </div>
-                            </div>
+                            </form>
                         )}
 
                         {/* Pricing Tab */}
@@ -286,24 +387,21 @@ const ProductModal = ({
                                     {/* Unit Price */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Unit Price (PKR) *
+                                            Unit Price (PKR) <span className="text-red-500">*</span>
                                         </label>
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={formData.unit_price}
-                                                onChange={(e) => handleInputChange('unit_price', parseFloat(e.target.value) || '')}
-                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                                    errors.unit_price ? 'border-red-300' : 'border-gray-300'
-                                                }`}
-                                                placeholder="0.00"
-                                            />
-                                        </div>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.unit_price}
+                                            onChange={(e) => handleInputChange('unit_price', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                                errors.unit_price ? 'border-red-300' : 'border-gray-300'
+                                            }`}
+                                            placeholder="0.00"
+                                            required
+                                        />
                                         {errors.unit_price && (
-                                            <p className="mt-1 text-sm text-red-600">{errors.unit_price}</p>
+                                            <p className="mt-1 text-xs text-red-600">{errors.unit_price}</p>
                                         )}
                                     </div>
 
@@ -315,148 +413,139 @@ const ProductModal = ({
                                         <input
                                             type="number"
                                             step="0.01"
-                                            min="0"
-                                            max="100"
-                                            value={formData.tax_rate}
-                                            onChange={(e) => handleInputChange('tax_rate', parseFloat(e.target.value) || 0)}
+                                            value={formData.tax_rate || ''}
+                                            onChange={(e) => handleInputChange('tax_rate', e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                             placeholder="0.00"
                                         />
                                     </div>
                                 </div>
 
-                                {/* Price Preview */}
-                                <div className="bg-gray-50 p-4 rounded-lg">
-                                    <h4 className="text-sm font-medium text-gray-700 mb-3">Price Preview</h4>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span>Base Price:</span>
-                                            <span>PKR {(formData.unit_price || 0).toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Tax ({formData.tax_rate || 0}%):</span>
-                                            <span>PKR {((formData.unit_price || 0) * (formData.tax_rate || 0) / 100).toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between font-medium border-t pt-2">
-                                            <span>Total Price:</span>
-                                            <span>PKR {((formData.unit_price || 0) * (1 + (formData.tax_rate || 0) / 100)).toLocaleString()}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Details Tab */}
-                        {activeTab === 'details' && (
-                            <div className="space-y-6">
-                                {/* Product Analytics (if editing) */}
-                                {product && (
-                                    <div className="bg-blue-50 p-4 rounded-lg">
-                                        <h4 className="text-sm font-medium text-blue-800 mb-3 flex items-center">
-                                            <BarChart3 className="w-4 h-4 mr-2" />
-                                            Product Performance
+                                {/* Price Calculator */}
+                                {formData.unit_price && (
+                                    <div className="bg-blue-50 rounded-lg p-4">
+                                        <h4 className="flex items-center text-sm font-medium text-blue-900 mb-3">
+                                            <DollarSign className="w-4 h-4 mr-2" />
+                                            Price Calculator
                                         </h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                                             <div>
-                                                <p className="text-blue-600">Total Sales</p>
+                                                <p className="text-blue-600">Unit Price</p>
                                                 <p className="font-medium text-blue-800">
-                                                    {product.total_sold || 0} units
+                                                    PKR {parseFloat(formData.unit_price).toLocaleString()}
                                                 </p>
                                             </div>
                                             <div>
-                                                <p className="text-blue-600">Revenue</p>
+                                                <p className="text-blue-600">Tax Amount</p>
                                                 <p className="font-medium text-blue-800">
-                                                    PKR {(product.total_revenue || 0).toLocaleString()}
+                                                    PKR {((parseFloat(formData.unit_price) * (parseFloat(formData.tax_rate) || 0)) / 100).toLocaleString()}
                                                 </p>
                                             </div>
                                             <div>
-                                                <p className="text-blue-600">Created</p>
+                                                <p className="text-blue-600">Total Price</p>
                                                 <p className="font-medium text-blue-800">
-                                                    {new Date(product.created_at).toLocaleDateString()}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-blue-600">Last Updated</p>
-                                                <p className="font-medium text-blue-800">
-                                                    {new Date(product.updated_at).toLocaleDateString()}
+                                                    PKR {(parseFloat(formData.unit_price) + ((parseFloat(formData.unit_price) * (parseFloat(formData.tax_rate) || 0)) / 100)).toLocaleString()}
                                                 </p>
                                             </div>
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                        )}
 
-                                {/* Additional Information */}
-                                <div className="space-y-4">
-                                    <h4 className="text-sm font-medium text-gray-700">Additional Information</h4>
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Details Tab (only for existing products) */}
+                        {activeTab === 'details' && product && (
+                            <div className="space-y-6">
+                                {/* Product Performance */}
+                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6">
+                                    <h4 className="flex items-center text-lg font-medium text-gray-900 mb-4">
+                                        <BarChart3 className="w-4 h-4 mr-2" />
+                                        Product Performance
+                                    </h4>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                         <div>
-                                            <label className="block text-sm text-gray-600 mb-1">
-                                                Barcode
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formData.barcode || ''}
-                                                onChange={(e) => handleInputChange('barcode', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                placeholder="Product barcode"
-                                            />
+                                            <p className="text-blue-600">Total Sales</p>
+                                            <p className="font-medium text-blue-800">
+                                                {product.total_sold || 0} units
+                                            </p>
                                         </div>
-
                                         <div>
-                                            <label className="block text-sm text-gray-600 mb-1">
-                                                Brand
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formData.brand || ''}
-                                                onChange={(e) => handleInputChange('brand', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                placeholder="Product brand"
-                                            />
+                                            <p className="text-blue-600">Revenue</p>
+                                            <p className="font-medium text-blue-800">
+                                                PKR {(product.total_revenue || 0).toLocaleString()}
+                                            </p>
                                         </div>
-
                                         <div>
-                                            <label className="block text-sm text-gray-600 mb-1">
-                                                Weight (kg)
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={formData.weight || ''}
-                                                onChange={(e) => handleInputChange('weight', parseFloat(e.target.value) || '')}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                placeholder="0.00"
-                                            />
+                                            <p className="text-blue-600">Created</p>
+                                            <p className="font-medium text-blue-800">
+                                                {new Date(product.created_at).toLocaleDateString()}
+                                            </p>
                                         </div>
-
                                         <div>
-                                            <label className="block text-sm text-gray-600 mb-1">
-                                                Min. Order Qty
-                                            </label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                value={formData.min_order_quantity || ''}
-                                                onChange={(e) => handleInputChange('min_order_quantity', parseInt(e.target.value) || '')}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                placeholder="1"
-                                            />
+                                            <p className="text-blue-600">Last Updated</p>
+                                            <p className="font-medium text-blue-800">
+                                                {new Date(product.updated_at).toLocaleDateString()}
+                                            </p>
                                         </div>
                                     </div>
+                                </div>
 
-                                    {/* Notes */}
+                                {/* Additional Product Fields */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Barcode */}
                                     <div>
-                                        <label className="block text-sm text-gray-600 mb-1">
-                                            Internal Notes
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Barcode
                                         </label>
-                                        <textarea
-                                            value={formData.notes || ''}
-                                            onChange={(e) => handleInputChange('notes', e.target.value)}
-                                            rows={3}
+                                        <input
+                                            type="text"
+                                            value={formData.barcode || ''}
+                                            onChange={(e) => handleInputChange('barcode', e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            placeholder="Internal notes about this product"
+                                            placeholder="Product barcode"
+                                        />
+                                    </div>
+
+                                    {/* Brand */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Brand
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.brand || ''}
+                                            onChange={(e) => handleInputChange('brand', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            placeholder="Product brand"
+                                        />
+                                    </div>
+
+                                    {/* Weight */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Weight (kg)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.weight || ''}
+                                            onChange={(e) => handleInputChange('weight', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+
+                                    {/* Minimum Order Quantity */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Min. Order Qty
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={formData.min_order_qty || ''}
+                                            onChange={(e) => handleInputChange('min_order_qty', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            placeholder="1"
                                         />
                                     </div>
                                 </div>
@@ -465,43 +554,56 @@ const ProductModal = ({
                     </div>
 
                     {/* Footer */}
-                    <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
-                        <div className="flex items-center justify-between">
-                            <div className="text-sm text-gray-500">
-                                * Required fields
-                            </div>
-                            <div className="flex space-x-3">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                                    disabled={loading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader className="w-4 h-4 animate-spin" />
-                                            <span>Saving...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="w-4 h-4" />
-                                            <span>{product ? 'Update Product' : 'Create Product'}</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
+                    <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                            {product && (
+                                <>
+                                    <Eye className="w-4 h-4" />
+                                    <span>ID: {product.product_id}</span>
+                                </>
+                            )}
+                        </div>
+                        
+                        <div className="flex items-center space-x-3">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            
+                            <button
+                                onClick={handleSubmit}
+                                disabled={loading}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                            >
+                                {loading ? (
+                                    <Loader className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4" />
+                                )}
+                                <span>{loading ? 'Saving...' : 'Save Product'}</span>
+                            </button>
                         </div>
                     </div>
-                </form>
+                </div>
             </div>
-        </div>
+
+            {/* Category Modal */}
+            {showCategoryModal && (
+                <CategoryModal
+                    category={selectedCategory}
+                    isOpen={showCategoryModal}
+                    onClose={() => {
+                        setShowCategoryModal(false);
+                        setSelectedCategory(null);
+                    }}
+                    onSuccess={handleCategorySuccess}
+                    existingCategories={allCategories}
+                />
+            )}
+        </>
     );
 };
 
