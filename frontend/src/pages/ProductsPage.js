@@ -1,4 +1,4 @@
-// frontend/src/pages/ProductsPage.js - Complete Product Management Interface
+// frontend/src/pages/ProductsPage.js - Updated with Modal Integration
 import React, { useState, useEffect } from 'react';
 import { 
     Search, Filter, Plus, Eye, Edit, Trash2, Package, DollarSign,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { productService } from '../services/productService';
+import ProductModal from '../components/admin/ProductModal';
 
 const ProductsPage = () => {
     const { user } = useAuth();
@@ -97,6 +98,10 @@ const ProductsPage = () => {
     const handleProductAction = async (action, product) => {
         try {
             switch (action) {
+                case 'create':
+                    setSelectedProduct(null);
+                    setShowProductModal(true);
+                    break;
                 case 'edit':
                     setSelectedProduct(product);
                     setShowProductModal(true);
@@ -124,6 +129,11 @@ const ProductsPage = () => {
         }
     };
 
+    const handleModalSuccess = () => {
+        fetchProducts();
+        fetchStats();
+    };
+
     const handleBulkAction = async (action) => {
         if (selectedProducts.length === 0) {
             alert('Please select products first');
@@ -132,7 +142,6 @@ const ProductsPage = () => {
 
         try {
             const promises = selectedProducts.map(productId => {
-                const product = products.find(p => p.product_id === productId);
                 if (action === 'activate') {
                     return productService.toggleProductStatus(productId, true);
                 } else if (action === 'deactivate') {
@@ -169,64 +178,96 @@ const ProductsPage = () => {
     // Product card component (grid view)
     const ProductCard = ({ product }) => {
         const statusBadge = productService.utils.getStatusBadge(product.is_active);
-        const metrics = productService.utils.calculateProductMetrics(product);
+        const categoryBadge = productService.utils.getCategoryBadge(product.category);
 
         return (
             <div className="bg-white rounded-lg shadow border border-gray-200 hover:shadow-md transition-shadow">
                 <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{product.product_name}</h3>
-                            {product.product_code && (
-                                <p className="text-sm text-gray-600 mb-2">Code: {product.product_code}</p>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                {product.product_name}
+                            </h3>
+                            <p className="text-sm text-gray-500 mb-2">
+                                Code: {product.product_code}
+                            </p>
+                            {product.description && (
+                                <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                                    {product.description}
+                                </p>
                             )}
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${statusBadge.bgColor} ${statusBadge.textColor}`}>
-                                {statusBadge.label}
-                            </span>
                         </div>
-                        <div className="relative">
-                            <button className="p-1 hover:bg-gray-100 rounded">
-                                <MoreVertical className="w-5 h-5" />
+                        <div className="ml-4">
+                            <div className="flex items-center space-x-2 mb-2">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusBadge.className}`}>
+                                    {statusBadge.text}
+                                </span>
+                                {product.category && (
+                                    <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                        {product.category}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <p className="text-2xl font-bold text-gray-900">
+                                PKR {(product.unit_price || 0).toLocaleString()}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                                per {product.unit_of_measure || 'unit'}
+                            </p>
+                        </div>
+                        {product.tax_rate > 0 && (
+                            <div className="text-right">
+                                <p className="text-sm text-gray-600">Tax: {product.tax_rate}%</p>
+                                <p className="text-sm font-medium text-gray-900">
+                                    Total: PKR {(product.unit_price * (1 + product.tax_rate / 100)).toLocaleString()}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4 text-sm text-gray-500">
+                            <span>Created: {new Date(product.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={() => handleProductAction('view', product)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="View Details"
+                            >
+                                <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleProductAction('edit', product)}
+                                className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                title="Edit Product"
+                            >
+                                <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleProductAction('toggle', product)}
+                                className={`p-2 rounded-lg transition-colors ${
+                                    product.is_active 
+                                        ? 'text-gray-400 hover:text-orange-600 hover:bg-orange-50' 
+                                        : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                }`}
+                                title={product.is_active ? 'Deactivate' : 'Activate'}
+                            >
+                                {product.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                            </button>
+                            <button
+                                onClick={() => handleProductAction('delete', product)}
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Product"
+                            >
+                                <Trash2 className="w-4 h-4" />
                             </button>
                         </div>
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                        <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Price:</span>
-                            <span className="text-sm font-medium">{productService.utils.formatCurrency(product.unit_price)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Category:</span>
-                            <span className="text-sm">{product.category || 'Uncategorized'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Unit:</span>
-                            <span className="text-sm">{product.unit_of_measure}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Sales:</span>
-                            <span className="text-sm">{metrics.timesSold} orders</span>
-                        </div>
-                    </div>
-
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={() => handleProductAction('edit', product)}
-                            className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                        >
-                            Edit
-                        </button>
-                        <button
-                            onClick={() => handleProductAction('toggle', product)}
-                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                                product.is_active 
-                                    ? 'bg-red-600 text-white hover:bg-red-700' 
-                                    : 'bg-green-600 text-white hover:bg-green-700'
-                            }`}
-                        >
-                            {product.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
                     </div>
                 </div>
             </div>
@@ -236,7 +277,6 @@ const ProductsPage = () => {
     // Product row component (list view)
     const ProductRow = ({ product }) => {
         const statusBadge = productService.utils.getStatusBadge(product.is_active);
-        const metrics = productService.utils.calculateProductMetrics(product);
 
         return (
             <tr className="hover:bg-gray-50">
@@ -251,52 +291,74 @@ const ProductsPage = () => {
                                 setSelectedProducts(selectedProducts.filter(id => id !== product.product_id));
                             }
                         }}
-                        className="rounded border-gray-300"
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                        <div className="text-sm font-medium text-gray-900">{product.product_name}</div>
-                        {product.product_code && (
-                            <div className="text-sm text-gray-500">{product.product_code}</div>
-                        )}
+                    <div className="flex items-center">
+                        <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center mr-3">
+                            <Package className="w-5 h-5 text-gray-500" />
+                        </div>
+                        <div>
+                            <div className="text-sm font-medium text-gray-900">
+                                {product.product_name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                                {product.product_code}
+                            </div>
+                        </div>
                     </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-900">{product.category || 'Uncategorized'}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-gray-900">
-                        {productService.utils.formatCurrency(product.unit_price)}
-                    </span>
-                    <div className="text-sm text-gray-500">per {product.unit_of_measure}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${statusBadge.bgColor} ${statusBadge.textColor}`}>
-                        {statusBadge.label}
+                    <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                        {product.category || 'Uncategorized'}
                     </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <div>{metrics.timesSold} orders</div>
-                    <div className="text-gray-500">{metrics.quantitySold} units</div>
+                    PKR {(product.unit_price || 0).toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {product.unit_of_measure || 'piece'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusBadge.className}`}>
+                        {statusBadge.text}
+                    </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(product.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center space-x-2">
+                        <button
+                            onClick={() => handleProductAction('view', product)}
+                            className="text-blue-600 hover:text-blue-900 transition-colors"
+                            title="View"
+                        >
+                            <Eye className="w-4 h-4" />
+                        </button>
                         <button
                             onClick={() => handleProductAction('edit', product)}
-                            className="text-blue-600 hover:text-blue-900"
+                            className="text-green-600 hover:text-green-900 transition-colors"
+                            title="Edit"
                         >
                             <Edit className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => handleProductAction('toggle', product)}
-                            className={product.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}
+                            className={`transition-colors ${
+                                product.is_active 
+                                    ? 'text-orange-600 hover:text-orange-900' 
+                                    : 'text-green-600 hover:text-green-900'
+                            }`}
+                            title={product.is_active ? 'Deactivate' : 'Activate'}
                         >
                             {product.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                         </button>
                         <button
                             onClick={() => handleProductAction('delete', product)}
-                            className="text-red-600 hover:text-red-900"
+                            className="text-red-600 hover:text-red-900 transition-colors"
+                            title="Delete"
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
@@ -306,49 +368,24 @@ const ProductsPage = () => {
         );
     };
 
-    if (user?.role !== 'admin') {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-center">
-                    <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-                    <p className="text-gray-600">Product management is available to administrators only.</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Product Catalog</h1>
-                    <p className="text-gray-600">Manage your product inventory and pricing</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Products</h1>
+                    <p className="text-gray-600">Manage your product catalog</p>
                 </div>
-                <div className="flex space-x-3">
-                    <button className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center gap-2">
-                        <Download className="w-4 h-4" />
-                        Export
-                    </button>
-                    <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
-                        <Upload className="w-4 h-4" />
-                        Import
-                    </button>
-                    <button
-                        onClick={() => {
-                            setSelectedProduct(null);
-                            setShowProductModal(true);
-                        }}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add Product
-                    </button>
-                </div>
+                <button
+                    onClick={() => handleProductAction('create')}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Product</span>
+                </button>
             </div>
 
-            {/* Statistics Cards */}
+            {/* Statistics */}
             {stats && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatsCard
@@ -362,71 +399,67 @@ const ProductsPage = () => {
                         title="Categories"
                         value={stats.total_categories || 0}
                         icon={Tag}
-                        color="bg-purple-500"
-                        subtitle="Product categories"
-                    />
-                    <StatsCard
-                        title="Average Price"
-                        value={productService.utils.formatCurrency(stats.average_price || 0)}
-                        icon={DollarSign}
                         color="bg-green-500"
-                        subtitle="Per product"
                     />
                     <StatsCard
-                        title="Products with Sales"
-                        value={stats.products_with_sales || 0}
+                        title="Avg. Price"
+                        value={`PKR ${(stats.average_price || 0).toLocaleString()}`}
+                        icon={DollarSign}
+                        color="bg-yellow-500"
+                    />
+                    <StatsCard
+                        title="This Month"
+                        value={stats.products_added_this_month || 0}
                         icon={TrendingUp}
-                        color="bg-orange-500"
-                        subtitle="Have been sold"
+                        color="bg-purple-500"
+                        subtitle="New products"
                     />
                 </div>
             )}
 
             {/* Filters and Search */}
             <div className="bg-white p-6 rounded-lg shadow">
-                <div className="flex flex-col lg:flex-row gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                     {/* Search */}
-                    <div className="flex-1">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                            <input
-                                type="text"
-                                placeholder="Search products..."
-                                value={searchTerm}
-                                onChange={handleSearch}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                        </div>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchTerm}
+                            onChange={handleSearch}
+                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
                     </div>
 
                     {/* Category Filter */}
-                    <div className="min-w-[200px]">
+                    <div>
                         <select
                             value={categoryFilter}
                             onChange={(e) => {
                                 setCategoryFilter(e.target.value);
                                 setCurrentPage(1);
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <option value="">All Categories</option>
-                            {categories.map((category) => (
-                                <option key={category.category} value={category.category}>
-                                    {category.category} ({category.product_count})
+                            {categories.map(category => (
+                                <option key={category} value={category}>
+                                    {category}
                                 </option>
                             ))}
                         </select>
                     </div>
 
                     {/* Status Filter */}
-                    <div className="min-w-[150px]">
+                    <div>
                         <select
                             value={statusFilter}
                             onChange={(e) => {
                                 setStatusFilter(e.target.value);
                                 setCurrentPage(1);
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <option value="all">All Status</option>
                             <option value="active">Active</option>
@@ -435,16 +468,24 @@ const ProductsPage = () => {
                     </div>
 
                     {/* View Mode Toggle */}
-                    <div className="flex bg-gray-200 rounded-lg p-1">
+                    <div className="flex items-center space-x-2">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow' : ''}`}
+                            className={`p-2 rounded-lg transition-colors ${
+                                viewMode === 'grid' 
+                                    ? 'bg-blue-100 text-blue-600' 
+                                    : 'text-gray-400 hover:text-gray-600'
+                            }`}
                         >
                             <Grid className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`p-2 rounded ${viewMode === 'list' ? 'bg-white shadow' : ''}`}
+                            className={`p-2 rounded-lg transition-colors ${
+                                viewMode === 'list' 
+                                    ? 'bg-blue-100 text-blue-600' 
+                                    : 'text-gray-400 hover:text-gray-600'
+                            }`}
                         >
                             <List className="w-4 h-4" />
                         </button>
@@ -453,24 +494,28 @@ const ProductsPage = () => {
 
                 {/* Bulk Actions */}
                 {selectedProducts.length > 0 && (
-                    <div className="mt-4 flex items-center gap-4 p-3 bg-blue-50 rounded-lg">
-                        <span className="text-sm text-blue-800">
+                    <div className="flex items-center space-x-2 mb-4 p-3 bg-blue-50 rounded-lg">
+                        <span className="text-sm text-blue-700">
                             {selectedProducts.length} product(s) selected
                         </span>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => handleBulkAction('activate')}
-                                className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                            >
-                                Activate
-                            </button>
-                            <button
-                                onClick={() => handleBulkAction('deactivate')}
-                                className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-                            >
-                                Deactivate
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => handleBulkAction('activate')}
+                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                        >
+                            Activate
+                        </button>
+                        <button
+                            onClick={() => handleBulkAction('deactivate')}
+                            className="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 transition-colors"
+                        >
+                            Deactivate
+                        </button>
+                        <button
+                            onClick={() => setSelectedProducts([])}
+                            className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors"
+                        >
+                            Clear
+                        </button>
                     </div>
                 )}
             </div>
@@ -478,46 +523,44 @@ const ProductsPage = () => {
             {/* Products Display */}
             <div className="bg-white rounded-lg shadow">
                 {loading ? (
-                    <div className="flex items-center justify-center h-64">
+                    <div className="flex items-center justify-center py-12">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <span className="ml-2 text-gray-600">Loading products...</span>
                     </div>
                 ) : products.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64">
-                        <Package className="w-16 h-16 text-gray-300 mb-4" />
+                    <div className="text-center py-12">
+                        <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
-                        <p className="text-gray-600 mb-4">
+                        <p className="text-gray-500 mb-4">
                             {searchTerm || categoryFilter || statusFilter !== 'all' 
-                                ? 'Try adjusting your filters' 
-                                : 'Get started by adding your first product'
+                                ? 'Try adjusting your filters to see more results.'
+                                : 'Get started by adding your first product to the catalog.'
                             }
                         </p>
                         <button
-                            onClick={() => {
-                                setSelectedProduct(null);
-                                setShowProductModal(true);
-                            }}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                            onClick={() => handleProductAction('create')}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                         >
-                            Add Product
+                            Add First Product
                         </button>
                     </div>
                 ) : viewMode === 'grid' ? (
                     <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {products.map((product) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {products.map(product => (
                                 <ProductCard key={product.product_id} product={product} />
                             ))}
                         </div>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
+                        <table className="w-full">
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left">
                                         <input
                                             type="checkbox"
-                                            checked={selectedProducts.length === products.length}
+                                            checked={selectedProducts.length === products.length && products.length > 0}
                                             onChange={(e) => {
                                                 if (e.target.checked) {
                                                     setSelectedProducts(products.map(p => p.product_id));
@@ -525,41 +568,38 @@ const ProductsPage = () => {
                                                     setSelectedProducts([]);
                                                 }
                                             }}
-                                            className="rounded border-gray-300"
+                                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                         />
                                     </th>
-                                    <th 
-                                        onClick={() => handleSort('product_name')}
-                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                                    >
-                                        Product Name
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                                        onClick={() => handleSort('product_name')}>
+                                        Product
                                         {sortBy === 'product_name' && (
                                             <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>
                                         )}
                                     </th>
-                                    <th 
-                                        onClick={() => handleSort('category')}
-                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                                    >
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Category
-                                        {sortBy === 'category' && (
-                                            <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                                        )}
                                     </th>
-                                    <th 
-                                        onClick={() => handleSort('unit_price')}
-                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                                    >
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                                        onClick={() => handleSort('unit_price')}>
                                         Price
                                         {sortBy === 'unit_price' && (
                                             <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>
                                         )}
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Status
+                                        Unit
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Sales
+                                        Status
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                                        onClick={() => handleSort('created_at')}>
+                                        Created
+                                        {sortBy === 'created_at' && (
+                                            <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                                        )}
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Actions
@@ -567,7 +607,7 @@ const ProductsPage = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {products.map((product) => (
+                                {products.map(product => (
                                     <ProductRow key={product.product_id} product={product} />
                                 ))}
                             </tbody>
@@ -624,33 +664,17 @@ const ProductsPage = () => {
                 </div>
             )}
 
-            {/* Product Modal (placeholder - would need actual ProductForm component) */}
-            {showProductModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-4">
-                                {selectedProduct ? 'Edit Product' : 'Add New Product'}
-                            </h3>
-                            <p className="text-gray-600 mb-4">
-                                Product form component would go here. This would include fields for product name, 
-                                code, description, price, category, etc.
-                            </p>
-                            <div className="flex space-x-3">
-                                <button
-                                    onClick={() => setShowProductModal(false)}
-                                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400"
-                                >
-                                    Cancel
-                                </button>
-                                <button className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700">
-                                    Save
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Product Modal */}
+            <ProductModal
+                product={selectedProduct}
+                isOpen={showProductModal}
+                onClose={() => {
+                    setShowProductModal(false);
+                    setSelectedProduct(null);
+                }}
+                onSuccess={handleModalSuccess}
+                categories={categories}
+            />
         </div>
     );
 };
