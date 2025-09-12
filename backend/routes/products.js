@@ -307,6 +307,59 @@ router.put('/:id', authenticateToken, requireRole('admin'), updateProductValidat
     }
 });
 
+// DELETE /api/products/:id - Delete product (Admin only)
+router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const productId = req.params.id;
+
+        // Check if product exists
+        const existingProduct = await query(
+            'SELECT product_id, product_name FROM products WHERE product_id = $1',
+            [productId]
+        );
+
+        if (existingProduct.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        const productName = existingProduct.rows[0].product_name;
+
+        // Check if product is used in any invoices
+        const invoiceCheck = await query(
+            'SELECT COUNT(*) FROM invoice_items WHERE product_id = $1',
+            [productId]
+        );
+
+        const invoiceCount = parseInt(invoiceCheck.rows[0].count);
+
+        if (invoiceCount > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Cannot delete product "${productName}". It is used in ${invoiceCount} invoice(s). Consider deactivating instead.`,
+                data: { invoiceCount }
+            });
+        }
+
+        // Delete the product
+        await query('DELETE FROM products WHERE product_id = $1', [productId]);
+
+        res.json({
+            success: true,
+            message: `Product "${productName}" deleted successfully`
+        });
+
+    } catch (error) {
+        console.error('Delete product error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+});
+
 // POST /api/products/:id/activate - Activate product
 router.post('/:id/activate', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
