@@ -1,4 +1,4 @@
-// frontend/src/components/admin/CategoryModal.js - Complete Category Management Modal
+// frontend/src/components/admin/CategoryModal.js - Fixed with Success Message
 import React, { useState, useEffect } from 'react';
 import {
     X, Save, Tag, FileText, AlertCircle, CheckCircle, 
@@ -16,7 +16,9 @@ const CategoryModal = ({
 }) => {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
-    const [activeTab, setActiveTab] = useState('basic'); // basic, analytics
+    const [activeTab, setActiveTab] = useState('basic');
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
 
     // Form data
     const [formData, setFormData] = useState(
@@ -38,6 +40,8 @@ const CategoryModal = ({
         }
         setErrors({});
         setActiveTab('basic');
+        setShowSuccess(false);
+        setSuccessMessage('');
     }, [category, isOpen, existingCategories]);
 
     const handleInputChange = (field, value) => {
@@ -73,7 +77,7 @@ const CategoryModal = ({
     };
 
     const validateForm = () => {
-        const validationErrors = categoryService.utils.validateCategory(formData, !!category);
+        const validationErrors = categoryService.utils.validateCategory(formData, !category);
         
         // Additional unique name validation
         const nameValidation = categoryService.utils.validateCategoryName(
@@ -90,16 +94,26 @@ const CategoryModal = ({
         return Object.keys(validationErrors).length === 0;
     };
 
+    const resetForm = () => {
+        setFormData({
+            ...categoryService.utils.getDefaultCategoryData(),
+            display_order: categoryService.utils.generateDisplayOrder(existingCategories)
+        });
+        setErrors({});
+        setActiveTab('basic');
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         
         if (!validateForm()) {
-            setActiveTab('basic'); // Switch to basic tab if there are errors
+            setActiveTab('basic');
             return;
         }
 
         try {
             setLoading(true);
+            setShowSuccess(false);
             
             const submitData = {
                 category_name: formData.category_name.trim(),
@@ -107,14 +121,36 @@ const CategoryModal = ({
                 display_order: parseInt(formData.display_order) || 0
             };
             
+            let response;
             if (category) {
-                await categoryService.updateCategory(category.category_id, submitData);
+                response = await categoryService.updateCategory(category.category_id, submitData);
+                setSuccessMessage('Category updated successfully!');
             } else {
-                await categoryService.createCategory(submitData);
+                response = await categoryService.createCategory(submitData);
+                setSuccessMessage('Category created successfully!');
             }
             
-            onSuccess();
-            onClose();
+            // Show success message
+            setShowSuccess(true);
+            
+            // Call onSuccess to refresh parent component data
+            if (onSuccess) {
+                onSuccess();
+            }
+            
+            // For new categories, reset form after 2 seconds for next entry
+            if (!category) {
+                setTimeout(() => {
+                    resetForm();
+                    setShowSuccess(false);
+                }, 2000);
+            } else {
+                // For updates, close modal after 2 seconds
+                setTimeout(() => {
+                    onClose();
+                }, 2000);
+            }
+            
         } catch (error) {
             console.error('Error saving category:', error);
             setErrors({ 
@@ -149,10 +185,7 @@ const CategoryModal = ({
                                 {category ? 'Edit Category' : 'Add New Category'}
                             </h2>
                             <p className="text-sm text-gray-500">
-                                {category ? 
-                                    'Update category information and settings' : 
-                                    'Create a new product category'
-                                }
+                                {category ? 'Update category information' : 'Create a new category for organizing products'}
                             </p>
                         </div>
                     </div>
@@ -160,36 +193,53 @@ const CategoryModal = ({
                         onClick={onClose}
                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                     >
-                        <X className="w-5 h-5 text-gray-400" />
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex border-b border-gray-200">
-                    <button
-                        onClick={() => setActiveTab('basic')}
-                        className={`px-6 py-3 text-sm font-medium transition-colors ${
-                            activeTab === 'basic'
-                                ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
-                                : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        <Tag className="w-4 h-4 mr-2 inline" />
-                        Basic Information
-                    </button>
-                    {category && (
+                {/* Success Message */}
+                {showSuccess && (
+                    <div className="mx-6 mt-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start space-x-3">
+                        <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                        <div>
+                            <h4 className="text-sm font-medium text-green-800">Success!</h4>
+                            <p className="text-sm text-green-700">{successMessage}</p>
+                            {!category && (
+                                <p className="text-xs text-green-600 mt-1">Form will reset in 2 seconds for next category...</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tab Navigation */}
+                <div className="border-b border-gray-200">
+                    <nav className="flex space-x-8 px-6">
                         <button
-                            onClick={() => setActiveTab('analytics')}
-                            className={`px-6 py-3 text-sm font-medium transition-colors ${
-                                activeTab === 'analytics'
+                            onClick={() => setActiveTab('basic')}
+                            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                activeTab === 'basic'
                                     ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
                                     : 'text-gray-500 hover:text-gray-700'
                             }`}
                         >
-                            <BarChart3 className="w-4 h-4 mr-2 inline" />
-                            Analytics
+                            <Tag className="w-4 h-4 mr-2 inline" />
+                            Basic Info
                         </button>
-                    )}
+                        
+                        {category && categoryMetrics && (
+                            <button
+                                onClick={() => setActiveTab('analytics')}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === 'analytics'
+                                        ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                <BarChart3 className="w-4 h-4 mr-2 inline" />
+                                Analytics
+                            </button>
+                        )}
+                    </nav>
                 </div>
 
                 {/* Content */}
@@ -208,90 +258,23 @@ const CategoryModal = ({
                     {/* Basic Information Tab */}
                     {activeTab === 'basic' && (
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Category Name */}
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Category Name <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.category_name}
-                                        onChange={(e) => handleInputChange('category_name', e.target.value)}
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
-                                            errors.category_name ? 'border-red-300' : 'border-gray-300'
-                                        }`}
-                                        placeholder="Enter category name"
-                                        required
-                                    />
-                                    {errors.category_name && (
-                                        <p className="mt-1 text-xs text-red-600">{errors.category_name}</p>
-                                    )}
-                                </div>
-
-                                {/* Display Order */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Display Order
-                                    </label>
-                                    <div className="flex space-x-2">
-                                        <input
-                                            type="number"
-                                            value={formData.display_order || ''}
-                                            onChange={(e) => handleInputChange('display_order', e.target.value)}
-                                            className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
-                                                errors.display_order ? 'border-red-300' : 'border-gray-300'
-                                            }`}
-                                            placeholder="Order"
-                                            min="0"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleGenerateOrder}
-                                            className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-                                            title="Generate next order"
-                                        >
-                                            <Hash className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    {errors.display_order && (
-                                        <p className="mt-1 text-xs text-red-600">{errors.display_order}</p>
-                                    )}
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        Lower numbers appear first in lists
-                                    </p>
-                                </div>
-
-                                {/* Status Toggle (only for edit) */}
-                                {category && (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Status
-                                        </label>
-                                        <div className="flex items-center space-x-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleInputChange('is_active', !formData.is_active)}
-                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                                    formData.is_active ? 'bg-purple-600' : 'bg-gray-200'
-                                                }`}
-                                            >
-                                                <span
-                                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                                        formData.is_active ? 'translate-x-6' : 'translate-x-1'
-                                                    }`}
-                                                />
-                                            </button>
-                                            <span className={`text-sm font-medium ${
-                                                formData.is_active ? 'text-purple-600' : 'text-gray-500'
-                                            }`}>
-                                                {formData.is_active ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </div>
-                                        <p className="mt-1 text-xs text-gray-500">
-                                            Inactive categories won't appear in product forms
-                                        </p>
-                                    </div>
+                            {/* Category Name */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Category Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.category_name}
+                                    onChange={(e) => handleInputChange('category_name', e.target.value)}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                                        errors.category_name ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                    }`}
+                                    placeholder="Enter category name"
+                                    disabled={loading}
+                                />
+                                {errors.category_name && (
+                                    <p className="mt-1 text-sm text-red-600">{errors.category_name}</p>
                                 )}
                             </div>
 
@@ -303,17 +286,39 @@ const CategoryModal = ({
                                 <textarea
                                     value={formData.description || ''}
                                     onChange={(e) => handleInputChange('description', e.target.value)}
-                                    rows={3}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
-                                        errors.description ? 'border-red-300' : 'border-gray-300'
-                                    }`}
-                                    placeholder="Optional description for this category"
+                                    rows="3"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    placeholder="Category description (optional)"
+                                    disabled={loading}
                                 />
-                                {errors.description && (
-                                    <p className="mt-1 text-xs text-red-600">{errors.description}</p>
-                                )}
+                            </div>
+
+                            {/* Display Order */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Display Order
+                                </label>
+                                <div className="flex space-x-2">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={formData.display_order || ''}
+                                        onChange={(e) => handleInputChange('display_order', parseInt(e.target.value) || 0)}
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        placeholder="0"
+                                        disabled={loading}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateOrder}
+                                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                                        disabled={loading}
+                                    >
+                                        Auto
+                                    </button>
+                                </div>
                                 <p className="mt-1 text-xs text-gray-500">
-                                    {(formData.description || '').length}/500 characters
+                                    Lower numbers appear first. Click "Auto" to set next available order.
                                 </p>
                             </div>
                         </form>
@@ -322,85 +327,62 @@ const CategoryModal = ({
                     {/* Analytics Tab */}
                     {activeTab === 'analytics' && category && categoryMetrics && (
                         <div className="space-y-6">
-                            {/* Category Overview */}
-                            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-6">
-                                <h4 className="flex items-center text-lg font-medium text-gray-900 mb-4">
-                                    <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />
-                                    Category Performance
-                                </h4>
-                                
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="text-center">
-                                        <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg mx-auto mb-2">
-                                            <Package className="w-6 h-6 text-blue-600" />
+                            {/* Category Stats */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="bg-purple-50 rounded-lg p-4">
+                                    <div className="flex items-center space-x-3">
+                                        <Package className="w-8 h-8 text-purple-600" />
+                                        <div>
+                                            <p className="text-sm font-medium text-purple-600">Total Products</p>
+                                            <p className="text-2xl font-bold text-purple-900">
+                                                {categoryService.utils.formatNumber(categoryMetrics.totalProducts)}
+                                            </p>
                                         </div>
-                                        <p className="text-2xl font-bold text-blue-600">
-                                            {categoryMetrics.totalProducts}
-                                        </p>
-                                        <p className="text-sm text-gray-600">Total Products</p>
                                     </div>
-                                    
-                                    <div className="text-center">
-                                        <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-lg mx-auto mb-2">
-                                            <CheckCircle className="w-6 h-6 text-green-600" />
+                                </div>
+
+                                <div className="bg-green-50 rounded-lg p-4">
+                                    <div className="flex items-center space-x-3">
+                                        <DollarSign className="w-8 h-8 text-green-600" />
+                                        <div>
+                                            <p className="text-sm font-medium text-green-600">Total Revenue</p>
+                                            <p className="text-2xl font-bold text-green-900">
+                                                {categoryService.utils.formatNumber(categoryMetrics.totalRevenue, 'currency')}
+                                            </p>
                                         </div>
-                                        <p className="text-2xl font-bold text-green-600">
-                                            {categoryMetrics.activeProducts}
-                                        </p>
-                                        <p className="text-sm text-gray-600">Active Products</p>
                                     </div>
-                                    
-                                    <div className="text-center">
-                                        <div className="flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-lg mx-auto mb-2">
-                                            <DollarSign className="w-6 h-6 text-yellow-600" />
+                                </div>
+
+                                <div className="bg-blue-50 rounded-lg p-4">
+                                    <div className="flex items-center space-x-3">
+                                        <TrendingUp className="w-8 h-8 text-blue-600" />
+                                        <div>
+                                            <p className="text-sm font-medium text-blue-600">Active Products</p>
+                                            <p className="text-2xl font-bold text-blue-900">
+                                                {categoryService.utils.formatNumber(categoryMetrics.activeProducts)}
+                                            </p>
                                         </div>
-                                        <p className="text-2xl font-bold text-yellow-600">
-                                            {categoryService.utils.formatNumber(categoryMetrics.avgPrice, 'currency')}
-                                        </p>
-                                        <p className="text-sm text-gray-600">Avg. Price</p>
-                                    </div>
-                                    
-                                    <div className="text-center">
-                                        <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-lg mx-auto mb-2">
-                                            <TrendingUp className="w-6 h-6 text-purple-600" />
-                                        </div>
-                                        <p className="text-2xl font-bold text-purple-600">
-                                            {categoryService.utils.formatNumber(categoryMetrics.productUtilization, 'percentage')}
-                                        </p>
-                                        <p className="text-sm text-gray-600">Utilization</p>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Detailed Metrics */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                                    <h5 className="font-medium text-gray-900 mb-3">Product Breakdown</h5>
-                                    <div className="space-y-2">
+                            <div className="bg-gray-50 rounded-lg p-6">
+                                <h4 className="text-lg font-semibold text-gray-900 mb-4">Category Performance</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-3">
                                         <div className="flex justify-between">
                                             <span className="text-gray-600">Active Products:</span>
                                             <span className="font-medium text-green-600">
-                                                {categoryMetrics.activeProducts}
+                                                {categoryService.utils.formatNumber(categoryMetrics.activeProducts)}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-gray-600">Inactive Products:</span>
-                                            <span className="font-medium text-red-600">
-                                                {categoryMetrics.inactiveProducts}
+                                            <span className="font-medium text-orange-600">
+                                                {categoryService.utils.formatNumber(categoryMetrics.inactiveProducts)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">Total Products:</span>
-                                            <span className="font-medium text-blue-600">
-                                                {categoryMetrics.totalProducts}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                                    <h5 className="font-medium text-gray-900 mb-3">Financial Metrics</h5>
-                                    <div className="space-y-2">
                                         <div className="flex justify-between">
                                             <span className="text-gray-600">Total Revenue:</span>
                                             <span className="font-medium text-green-600">
@@ -425,33 +407,37 @@ const CategoryModal = ({
 
                             {/* Category Information */}
                             <div className="bg-gray-50 rounded-lg p-4">
-                                <h5 className="font-medium text-gray-900 mb-3">Category Information</h5>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <span className="text-gray-600">Created:</span>
-                                        <span className="ml-2 font-medium">
-                                            {new Date(category.created_at).toLocaleDateString()}
-                                        </span>
+                                <h5 className="text-md font-semibold text-gray-900 mb-3">Category Information</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <div>
+                                            <p className="text-purple-600">Created</p>
+                                            <p className="font-medium text-purple-800">
+                                                {new Date(category.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-blue-600">Display Order</p>
+                                            <p className="font-medium text-blue-800">
+                                                #{category.display_order}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <span className="text-gray-600">Last Updated:</span>
-                                        <span className="ml-2 font-medium">
-                                            {new Date(category.updated_at).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-gray-600">Display Order:</span>
-                                        <span className="ml-2 font-medium">
-                                            {category.display_order}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-gray-600">Status:</span>
-                                        <span className={`ml-2 font-medium ${
-                                            category.is_active ? 'text-green-600' : 'text-red-600'
-                                        }`}>
-                                            {category.is_active ? 'Active' : 'Inactive'}
-                                        </span>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <p className="text-green-600">Status</p>
+                                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                                category.is_active ? 'bg-green-100 text-green-600' : 'text-red-600'
+                                            }`}>
+                                                {category.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <p className="text-blue-600">Last Updated</p>
+                                            <p className="font-medium text-blue-800">
+                                                {new Date(category.updated_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -475,6 +461,7 @@ const CategoryModal = ({
                             type="button"
                             onClick={onClose}
                             className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            disabled={loading}
                         >
                             Cancel
                         </button>

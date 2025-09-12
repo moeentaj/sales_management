@@ -5,7 +5,7 @@ export const productService = {
     // Get all products with filtering and pagination
     getProducts: async (params = {}) => {
         const searchParams = new URLSearchParams();
-        
+
         Object.keys(params).forEach(key => {
             if (params[key] !== '' && params[key] !== null && params[key] !== undefined) {
                 searchParams.append(key, params[key]);
@@ -163,7 +163,7 @@ export const productService = {
             const namePrefix = productName.substring(0, 3).toUpperCase();
             const categoryPrefix = category ? category.substring(0, 2).toUpperCase() : '';
             const timestamp = Date.now().toString().slice(-4);
-            
+
             return `${categoryPrefix}${namePrefix}${timestamp}`;
         },
 
@@ -182,6 +182,47 @@ export const productService = {
                 revenuePerUnit: quantitySold > 0 ? revenue / quantitySold : 0
             };
         },
+
+        // Get category badge configuration
+        getCategoryBadge: (category) => {
+            if (!category) {
+                return {
+                    label: 'No Category',
+                    color: 'gray',
+                    bgColor: 'bg-gray-100',
+                    textColor: 'text-gray-800'
+                };
+            }
+
+            // Generate a color based on category name for consistency
+            const colors = [
+                { bg: 'bg-blue-100', text: 'text-blue-800', color: 'blue' },
+                { bg: 'bg-green-100', text: 'text-green-800', color: 'green' },
+                { bg: 'bg-purple-100', text: 'text-purple-800', color: 'purple' },
+                { bg: 'bg-orange-100', text: 'text-orange-800', color: 'orange' },
+                { bg: 'bg-pink-100', text: 'text-pink-800', color: 'pink' },
+                { bg: 'bg-indigo-100', text: 'text-indigo-800', color: 'indigo' },
+                { bg: 'bg-yellow-100', text: 'text-yellow-800', color: 'yellow' },
+                { bg: 'bg-red-100', text: 'text-red-800', color: 'red' }
+            ];
+
+            // Use string hash to consistently assign colors
+            const hash = category.split('').reduce((a, b) => {
+                a = ((a << 5) - a) + b.charCodeAt(0);
+                return a & a;
+            }, 0);
+
+            const colorIndex = Math.abs(hash) % colors.length;
+            const selectedColor = colors[colorIndex];
+
+            return {
+                label: category,
+                color: selectedColor.color,
+                bgColor: selectedColor.bg,
+                textColor: selectedColor.text
+            };
+        },
+
 
         // Get product availability status
         getAvailabilityStatus: (product) => {
@@ -259,7 +300,7 @@ export const productService = {
             };
 
             const response = await productService.getProducts(params);
-            
+
             return {
                 ...response,
                 data: {
@@ -280,7 +321,7 @@ export const productService = {
             }
 
             const response = await productService.getProductSuggestions(searchTerm);
-            
+
             return {
                 ...response,
                 data: response.data.map(product => ({

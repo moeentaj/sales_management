@@ -1,6 +1,6 @@
 // frontend/src/pages/ProductsPage.js - Updated with Modal Integration
 import React, { useState, useEffect } from 'react';
-import { 
+import {
     Search, Filter, Plus, Eye, Edit, Trash2, Package, DollarSign,
     TrendingUp, BarChart3, Download, Upload, CheckCircle, XCircle,
     Tag, Calendar, Grid, List, MoreVertical, Settings
@@ -38,7 +38,7 @@ const ProductsPage = () => {
         try {
             setLoading(true);
             const filters = productService.utils.createSearchFilters(searchTerm, categoryFilter, statusFilter);
-            
+
             const response = await productService.getProducts({
                 page: currentPage,
                 limit: 20,
@@ -62,7 +62,16 @@ const ProductsPage = () => {
         try {
             const response = await productService.getCategories();
             if (response.success) {
-                setCategories(response.data || []);
+                // Handle the response structure: [{category: "Electronics", product_count: 5}]
+                const categoryList = response.data.map(item => {
+                    // If it's an object with category property, extract the category name
+                    if (typeof item === 'object' && item.category) {
+                        return item.category;
+                    }
+                    // If it's already a string, use it as is
+                    return item;
+                });
+                setCategories(categoryList);
             }
         } catch (error) {
             console.error('Error fetching categories:', error);
@@ -251,11 +260,10 @@ const ProductsPage = () => {
                             </button>
                             <button
                                 onClick={() => handleProductAction('toggle', product)}
-                                className={`p-2 rounded-lg transition-colors ${
-                                    product.is_active 
-                                        ? 'text-gray-400 hover:text-orange-600 hover:bg-orange-50' 
-                                        : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
-                                }`}
+                                className={`p-2 rounded-lg transition-colors ${product.is_active
+                                    ? 'text-gray-400 hover:text-orange-600 hover:bg-orange-50'
+                                    : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                    }`}
                                 title={product.is_active ? 'Deactivate' : 'Activate'}
                             >
                                 {product.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -346,11 +354,10 @@ const ProductsPage = () => {
                         </button>
                         <button
                             onClick={() => handleProductAction('toggle', product)}
-                            className={`transition-colors ${
-                                product.is_active 
-                                    ? 'text-orange-600 hover:text-orange-900' 
-                                    : 'text-green-600 hover:text-green-900'
-                            }`}
+                            className={`transition-colors ${product.is_active
+                                ? 'text-orange-600 hover:text-orange-900'
+                                : 'text-green-600 hover:text-green-900'
+                                }`}
                             title={product.is_active ? 'Deactivate' : 'Activate'}
                         >
                             {product.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -403,7 +410,7 @@ const ProductsPage = () => {
                     />
                     <StatsCard
                         title="Avg. Price"
-                        value={`PKR ${(stats.average_price || 0).toLocaleString()}`}
+                        value={`PKR ${(Number(stats.average_price) || 0).toFixed(2)}`}
                         icon={DollarSign}
                         color="bg-yellow-500"
                     />
@@ -443,8 +450,8 @@ const ProductsPage = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <option value="">All Categories</option>
-                            {categories.map(category => (
-                                <option key={category} value={category}>
+                            {categories.map((category, index) => (
+                                <option key={index} value={category}>
                                     {category}
                                 </option>
                             ))}
@@ -471,21 +478,19 @@ const ProductsPage = () => {
                     <div className="flex items-center space-x-2">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded-lg transition-colors ${
-                                viewMode === 'grid' 
-                                    ? 'bg-blue-100 text-blue-600' 
-                                    : 'text-gray-400 hover:text-gray-600'
-                            }`}
+                            className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
+                                ? 'bg-blue-100 text-blue-600'
+                                : 'text-gray-400 hover:text-gray-600'
+                                }`}
                         >
                             <Grid className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`p-2 rounded-lg transition-colors ${
-                                viewMode === 'list' 
-                                    ? 'bg-blue-100 text-blue-600' 
-                                    : 'text-gray-400 hover:text-gray-600'
-                            }`}
+                            className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
+                                ? 'bg-blue-100 text-blue-600'
+                                : 'text-gray-400 hover:text-gray-600'
+                                }`}
                         >
                             <List className="w-4 h-4" />
                         </button>
@@ -532,7 +537,7 @@ const ProductsPage = () => {
                         <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
                         <p className="text-gray-500 mb-4">
-                            {searchTerm || categoryFilter || statusFilter !== 'all' 
+                            {searchTerm || categoryFilter || statusFilter !== 'all'
                                 ? 'Try adjusting your filters to see more results.'
                                 : 'Get started by adding your first product to the catalog.'
                             }
