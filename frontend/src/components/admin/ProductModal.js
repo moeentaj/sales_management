@@ -299,7 +299,7 @@ const ProductModal = ({
                                     <input
                                         type="text"
                                         value={formData.product_name}
-                                        onChange={(e) => handleInputChange('product_name', e.target.value)}
+                                        //onChange={(e) => handleInputChange('product_name', e.target.value)}
                                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                             errors.product_name ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
@@ -319,7 +319,7 @@ const ProductModal = ({
                                     <input
                                         type="text"
                                         value={formData.product_code}
-                                        onChange={(e) => handleInputChange('product_code', e.target.value)}
+                                        //onChange={(e) => handleInputChange('product_code', e.target.value)}
                                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                             errors.product_code ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
@@ -341,7 +341,7 @@ const ProductModal = ({
                                         step="0.01"
                                         min="0"
                                         value={formData.unit_price}
-                                        onChange={(e) => handleInputChange('unit_price', e.target.value)}
+                                        //onChange={(e) => handleInputChange('unit_price', e.target.value)}
                                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                             errors.unit_price ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
@@ -361,7 +361,7 @@ const ProductModal = ({
                                     <div className="flex space-x-2">
                                         <select
                                             value={formData.category || ''}
-                                            onChange={(e) => handleInputChange('category', e.target.value)}
+                                            //onChange={(e) => handleInputChange('category', e.target.value)}
                                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                             disabled={loading}
                                         >
@@ -390,7 +390,7 @@ const ProductModal = ({
                                     </label>
                                     <select
                                         value={formData.unit_of_measure || 'piece'}
-                                        onChange={(e) => handleInputChange('unit_of_measure', e.target.value)}
+                                        //onChange={(e) => handleInputChange('unit_of_measure', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         disabled={loading}
                                     >
@@ -417,7 +417,7 @@ const ProductModal = ({
                                     </label>
                                     <textarea
                                         value={formData.description || ''}
-                                        onChange={(e) => handleInputChange('description', e.target.value)}
+                                        //onChange={(e) => handleInputChange('description', e.target.value)}
                                         rows="3"
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         placeholder="Product description..."
@@ -436,7 +436,7 @@ const ProductModal = ({
                                         min="0"
                                         max="100"
                                         value={formData.tax_rate || ''}
-                                        onChange={(e) => handleInputChange('tax_rate', e.target.value)}
+                                        //onChange={(e) => handleInputChange('tax_rate', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         placeholder="0.00"
                                         disabled={loading}
@@ -472,7 +472,6 @@ const ProductModal = ({
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    console.log('Save Product button clicked!');
                                     handleSubmit();
                                 }}
                                 disabled={loading}

@@ -1,4 +1,4 @@
-// components/admin/DistributorDetails.js
+// components/admin/DistributorDetails.js - SAFE VERSION
 import React, { useState, useEffect } from 'react';
 import {
     X, Edit, Phone, Mail, MapPin, Building2, Hash, Users,
@@ -16,6 +16,7 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
     const [contacts, setContacts] = useState([]);
     const [assignedStaff, setAssignedStaff] = useState([]);
     const [stats, setStats] = useState({});
+    const [errors, setErrors] = useState({});
 
     useEffect(() => {
         loadDistributorDetails();
@@ -24,20 +25,144 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
     const loadDistributorDetails = async () => {
         try {
             setLoading(true);
+            setErrors({});
             
-            const [detailsRes, invoicesRes, contactsRes, staffRes, statsRes] = await Promise.all([
-                distributorService.getDistributor(distributor.distributor_id),
-                distributorService.getDistributorInvoices(distributor.distributor_id, { limit: 10 }),
-                distributorService.getDistributorContacts(distributor.distributor_id),
-                distributorService.getDistributorStaff(distributor.distributor_id),
-                distributorService.getDistributorStats(distributor.distributor_id)
-            ]);
+            // Load basic distributor info (this endpoint should work)
+            try {
+                const detailsRes = await distributorService.getDistributor(distributor.distributor_id);
+                console.log('Distributor details response:', detailsRes);
+                
+                if (detailsRes && detailsRes.success && detailsRes.data) {
+                    setDistributorData(detailsRes.data);
+                } else {
+                    console.warn('Unexpected distributor details response format:', detailsRes);
+                    setDistributorData(distributor); // fallback to original data
+                }
+            } catch (error) {
+                console.error('Error loading distributor details:', error);
+                setErrors(prev => ({ ...prev, details: 'Failed to load distributor details' }));
+                setDistributorData(distributor); // fallback to original data
+            }
 
-            setDistributorData(detailsRes.data);
-            setInvoices(invoicesRes.data.invoices || []);
-            setContacts(contactsRes.data || []);
-            setAssignedStaff(staffRes.data || []);
-            setStats(statsRes.data || {});
+            // Try to load invoices - handle all response formats safely
+            try {
+                const invoicesRes = await distributorService.getDistributorInvoices(distributor.distributor_id, { limit: 10 });
+                console.log('Invoices response:', invoicesRes);
+                
+                if (invoicesRes && invoicesRes.success) {
+                    // Handle different response structures safely
+                    let invoiceList = [];
+                    
+                    if (invoicesRes.data) {
+                        if (Array.isArray(invoicesRes.data)) {
+                            // Direct array
+                            invoiceList = invoicesRes.data;
+                        } else if (invoicesRes.data.invoices && Array.isArray(invoicesRes.data.invoices)) {
+                            // Nested in data.invoices
+                            invoiceList = invoicesRes.data.invoices;
+                        } else if (typeof invoicesRes.data === 'object') {
+                            // Single object, wrap in array
+                            invoiceList = [invoicesRes.data];
+                        }
+                    }
+                    
+                    setInvoices(invoiceList);
+                } else {
+                    console.warn('Unexpected invoices response format:', invoicesRes);
+                    setInvoices([]);
+                }
+            } catch (error) {
+                console.error('Error loading distributor invoices:', error);
+                setErrors(prev => ({ ...prev, invoices: 'Invoice data not available' }));
+                setInvoices([]);
+            }
+
+            // Try to load contacts - handle all response formats safely
+            try {
+                const contactsRes = await distributorService.getDistributorContacts(distributor.distributor_id);
+                console.log('Contacts response:', contactsRes);
+                
+                if (contactsRes && contactsRes.success) {
+                    // Handle different response structures safely
+                    let contactList = [];
+                    
+                    if (contactsRes.data) {
+                        if (Array.isArray(contactsRes.data)) {
+                            contactList = contactsRes.data;
+                        } else if (typeof contactsRes.data === 'object') {
+                            // Single object, wrap in array
+                            contactList = [contactsRes.data];
+                        }
+                    }
+                    
+                    setContacts(contactList);
+                } else {
+                    console.warn('Unexpected contacts response format:', contactsRes);
+                    setContacts([]);
+                }
+            } catch (error) {
+                console.error('Error loading distributor contacts:', error);
+                setErrors(prev => ({ ...prev, contacts: 'Contacts feature not yet implemented' }));
+                setContacts([]);
+            }
+
+            // Try to load assigned staff - handle all response formats safely
+            try {
+                const staffRes = await distributorService.getDistributorStaff(distributor.distributor_id);
+                console.log('Staff response:', staffRes);
+                
+                if (staffRes && staffRes.success) {
+                    // Handle different response structures safely
+                    let staffList = [];
+                    
+                    if (staffRes.data) {
+                        if (Array.isArray(staffRes.data)) {
+                            staffList = staffRes.data;
+                        } else if (typeof staffRes.data === 'object') {
+                            // Single object, wrap in array
+                            staffList = [staffRes.data];
+                        }
+                    }
+                    
+                    setAssignedStaff(staffList);
+                } else {
+                    console.warn('Unexpected staff response format:', staffRes);
+                    setAssignedStaff([]);
+                }
+            } catch (error) {
+                console.error('Error loading distributor staff:', error);
+                setErrors(prev => ({ ...prev, staff: 'Staff assignment feature not yet implemented' }));
+                setAssignedStaff([]);
+            }
+
+            // Try to load stats - handle all response formats safely
+            try {
+                const statsRes = await distributorService.getDistributorStats(distributor.distributor_id);
+                console.log('Stats response:', statsRes);
+                
+                if (statsRes && statsRes.success && statsRes.data) {
+                    // Safely extract stats with fallbacks
+                    const statsData = statsRes.data;
+                    const safeStats = {
+                        totalInvoices: statsData.invoices?.total || 0,
+                        totalAmount: statsData.invoices?.total_amount || 0,
+                        paidAmount: statsData.invoices?.paid_amount || 0,
+                        balanceAmount: statsData.invoices?.balance_amount || 0,
+                        period: statsData.period || 'month',
+                        recentInvoices: statsData.recent_activity?.invoices || [],
+                        recentPayments: statsData.recent_activity?.payments || []
+                    };
+                    
+                    setStats(safeStats);
+                } else {
+                    console.warn('Unexpected stats response format:', statsRes);
+                    setStats({});
+                }
+            } catch (error) {
+                console.error('Error loading distributor stats:', error);
+                setErrors(prev => ({ ...prev, stats: 'Statistics feature not yet implemented' }));
+                setStats({});
+            }
 
         } catch (error) {
             console.error('Error loading distributor details:', error);
@@ -46,8 +171,30 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
         }
     };
 
-    const metrics = distributorService.utils.calculateMetrics(distributorData);
-    const statusInfo = distributorService.utils.getStatusInfo(distributorData);
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        try {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        } catch (error) {
+            return 'Invalid Date';
+        }
+    };
+
+    const formatCurrency = (amount) => {
+        if (!amount && amount !== 0) return '$0';
+        try {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(amount);
+        } catch (error) {
+            return '$0';
+        }
+    };
 
     const getStatusBadge = (status) => {
         const statusConfig = {
@@ -67,68 +214,11 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
         );
     };
 
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
-    };
-
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        }).format(amount || 0);
-    };
-
+    // Overview Tab Component
     const OverviewTab = () => (
         <div className="space-y-6">
-            {/* Key Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4">
-                    <div className="flex items-center">
-                        <FileText className="h-8 w-8 text-blue-600" />
-                        <div className="ml-3">
-                            <p className="text-sm font-medium text-blue-600">Total Invoices</p>
-                            <p className="text-2xl font-bold text-blue-900">{metrics.totalInvoices}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-green-50 rounded-lg p-4">
-                    <div className="flex items-center">
-                        <DollarSign className="h-8 w-8 text-green-600" />
-                        <div className="ml-3">
-                            <p className="text-sm font-medium text-green-600">Total Sales</p>
-                            <p className="text-2xl font-bold text-green-900">{formatCurrency(metrics.totalAmount)}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-yellow-50 rounded-lg p-4">
-                    <div className="flex items-center">
-                        <Clock className="h-8 w-8 text-yellow-600" />
-                        <div className="ml-3">
-                            <p className="text-sm font-medium text-yellow-600">Outstanding</p>
-                            <p className="text-2xl font-bold text-yellow-900">{formatCurrency(metrics.balanceAmount)}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-purple-50 rounded-lg p-4">
-                    <div className="flex items-center">
-                        <TrendingUp className="h-8 w-8 text-purple-600" />
-                        <div className="ml-3">
-                            <p className="text-sm font-medium text-purple-600">Payment Rate</p>
-                            <p className="text-2xl font-bold text-purple-900">{metrics.paymentPercentage}%</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* Basic Information */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <Building2 className="w-5 h-5 mr-2" />
                     Basic Information
@@ -136,219 +226,243 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Distributor Name</label>
-                        <p className="mt-1 text-sm text-gray-900">{distributorData.distributor_name}</p>
+                        <label className="text-sm font-medium text-gray-500">Distributor Name</label>
+                        <p className="text-gray-900 font-medium">{distributorData.distributor_name || 'N/A'}</p>
                     </div>
-
+                    
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Status</label>
+                        <label className="text-sm font-medium text-gray-500">NTN Number</label>
+                        <p className="text-gray-900">{distributorData.ntn_number || 'N/A'}</p>
+                    </div>
+                    
+                    <div>
+                        <label className="text-sm font-medium text-gray-500">Primary Contact</label>
+                        <p className="text-gray-900">{distributorData.primary_contact_person || 'N/A'}</p>
+                    </div>
+                    
+                    <div>
+                        <label className="text-sm font-medium text-gray-500">WhatsApp Number</label>
+                        <p className="text-gray-900">{distributorData.primary_whatsapp_number || 'N/A'}</p>
+                    </div>
+                    
+                    <div>
+                        <label className="text-sm font-medium text-gray-500">Status</label>
                         <div className="mt-1">
-                            <span className={`
-                                px-2 py-1 text-xs font-medium rounded-full
-                                ${statusInfo.color === 'green' 
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                distributorData.is_active 
                                     ? 'bg-green-100 text-green-800' 
                                     : 'bg-red-100 text-red-800'
-                                }
-                            `}>
-                                {statusInfo.label}
+                            }`}>
+                                {distributorData.is_active ? 'Active' : 'Inactive'}
                             </span>
                         </div>
                     </div>
-
-                    {distributorData.ntn_number && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">NTN Number</label>
-                            <p className="mt-1 text-sm text-gray-900">{distributorData.ntn_number}</p>
-                        </div>
-                    )}
-
+                    
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Created Date</label>
-                        <p className="mt-1 text-sm text-gray-900">{formatDate(distributorData.created_at)}</p>
-                    </div>
-
-                    {distributorData.address && (
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700">Address</label>
-                            <p className="mt-1 text-sm text-gray-900">{distributorData.address}</p>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Location</label>
-                        <p className="mt-1 text-sm text-gray-900">
-                            {[distributorData.city, distributorData.state, distributorData.postal_code]
-                                .filter(Boolean)
-                                .join(', ') || 'Not specified'}
-                        </p>
+                        <label className="text-sm font-medium text-gray-500">Created Date</label>
+                        <p className="text-gray-900">{formatDate(distributorData.created_at)}</p>
                     </div>
                 </div>
             </div>
 
-            {/* Primary Contact */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
+            {/* Address Information */}
+            {(distributorData.address || distributorData.city || distributorData.state) && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <MapPin className="w-5 h-5 mr-2" />
+                        Address Information
+                    </h3>
+                    
+                    <div className="space-y-3">
+                        {distributorData.address && (
+                            <div>
+                                <label className="text-sm font-medium text-gray-500">Address</label>
+                                <p className="text-gray-900">{distributorData.address}</p>
+                            </div>
+                        )}
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {distributorData.city && (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-500">City</label>
+                                    <p className="text-gray-900">{distributorData.city}</p>
+                                </div>
+                            )}
+                            
+                            {distributorData.state && (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-500">State</label>
+                                    <p className="text-gray-900">{distributorData.state}</p>
+                                </div>
+                            )}
+                            
+                            {distributorData.postal_code && (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-500">Postal Code</label>
+                                    <p className="text-gray-900">{distributorData.postal_code}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Statistics */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <User className="w-5 h-5 mr-2" />
-                    Primary Contact
+                    <TrendingUp className="w-5 h-5 mr-2" />
+                    Statistics
                 </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Contact Person</label>
-                        <p className="mt-1 text-sm text-gray-900">{distributorData.primary_contact_person}</p>
+                {errors.stats ? (
+                    <div className="text-center py-8">
+                        <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">{errors.stats}</p>
                     </div>
-
-                    {distributorData.primary_whatsapp_number && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">WhatsApp</label>
-                            <div className="mt-1 flex items-center space-x-2">
-                                <p className="text-sm text-gray-900">{distributorData.primary_whatsapp_number}</p>
-                                <a
-                                    href={`https://wa.me/${distributorData.primary_whatsapp_number.replace(/[^\d]/g, '')}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                >
-                                    <MessageCircle className="w-4 h-4" />
-                                </a>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="text-center p-4 bg-blue-50 rounded-lg">
+                            <div className="text-2xl font-bold text-blue-600">
+                                {stats.totalInvoices || 0}
                             </div>
+                            <div className="text-sm text-gray-600">Total Invoices</div>
                         </div>
-                    )}
-                </div>
+                        
+                        <div className="text-center p-4 bg-green-50 rounded-lg">
+                            <div className="text-2xl font-bold text-green-600">
+                                {formatCurrency(stats.totalAmount || 0)}
+                            </div>
+                            <div className="text-sm text-gray-600">Total Amount</div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                            <div className="text-2xl font-bold text-yellow-600">
+                                {formatCurrency(stats.paidAmount || 0)}
+                            </div>
+                            <div className="text-sm text-gray-600">Paid Amount</div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-red-50 rounded-lg">
+                            <div className="text-2xl font-bold text-red-600">
+                                {formatCurrency(stats.balanceAmount || 0)}
+                            </div>
+                            <div className="text-sm text-gray-600">Balance</div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
 
+    // Invoices Tab Component
     const InvoicesTab = () => (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Recent Invoices</h3>
-                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                    View All Invoices
+                <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                    View All
                 </button>
             </div>
-
-            {invoices.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                    <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p>No invoices found</p>
+            
+            {errors.invoices ? (
+                <div className="text-center py-8">
+                    <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">{errors.invoices}</p>
+                    <p className="text-xs text-gray-400 mt-1">Check server logs for invoice endpoint errors</p>
+                </div>
+            ) : !Array.isArray(invoices) || invoices.length === 0 ? (
+                <div className="text-center py-8">
+                    <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No invoices found</p>
                 </div>
             ) : (
-                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Invoice
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Date
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Amount
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Status
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Actions
-                                    </th>
+                <div className="overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {invoices.map((invoice, index) => (
+                                <tr key={invoice.invoice_id || index} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                        {invoice.invoice_number || `INV-${invoice.invoice_id || index}`}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                        {formatDate(invoice.invoice_date)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-900">
+                                        {formatCurrency(invoice.total_amount)}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        {getStatusBadge(invoice.status)}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <button className="text-blue-600 hover:text-blue-700 text-sm">
+                                            View
+                                        </button>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {invoices.map((invoice) => (
-                                    <tr key={invoice.invoice_id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">
-                                                {invoice.invoice_number}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-900">
-                                                {formatDate(invoice.invoice_date)}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-900">
-                                                {formatCurrency(invoice.total_amount)}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {getStatusBadge(invoice.status)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <button className="text-blue-600 hover:text-blue-900 mr-3">
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                            <button className="text-gray-600 hover:text-gray-900">
-                                                <Download className="w-4 h-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>
     );
 
+    // Contacts Tab Component
     const ContactsTab = () => (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
-                <button className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 text-sm font-medium">
-                    <Plus className="w-4 h-4" />
-                    <span>Add Contact</span>
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Contacts</h3>
+                <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                    Add Contact
                 </button>
             </div>
-
-            {contacts.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p>No additional contacts found</p>
+            
+            {errors.contacts ? (
+                <div className="text-center py-8">
+                    <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">{errors.contacts}</p>
+                </div>
+            ) : !Array.isArray(contacts) || contacts.length === 0 ? (
+                <div className="text-center py-8">
+                    <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No additional contacts found</p>
+                    <p className="text-xs text-gray-400 mt-1">Primary contact info is shown in the overview</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4">
                     {contacts.map((contact, index) => (
-                        <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
-                            <div className="flex items-start justify-between mb-3">
-                                <div className="flex-1">
-                                    <h4 className="font-medium text-gray-900">{contact.contact_person_name}</h4>
-                                    {contact.designation && (
-                                        <p className="text-sm text-gray-600">{contact.designation}</p>
-                                    )}
-                                    {contact.is_primary && (
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mt-1">
-                                            Primary
-                                        </span>
-                                    )}
+                        <div key={contact.contact_id || index} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-medium text-gray-900">{contact.contact_person_name || 'Unnamed Contact'}</h4>
+                                    <p className="text-sm text-gray-600">{contact.designation || 'N/A'}</p>
+                                    <div className="mt-2 space-y-1">
+                                        {contact.phone_number && (
+                                            <div className="flex items-center text-sm text-gray-600">
+                                                <Phone className="w-4 h-4 mr-2" />
+                                                {contact.phone_number}
+                                            </div>
+                                        )}
+                                        {contact.email && (
+                                            <div className="flex items-center text-sm text-gray-600">
+                                                <Mail className="w-4 h-4 mr-2" />
+                                                {contact.email}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                {contact.whatsapp_number && (
-                                    <div className="flex items-center space-x-2 text-sm">
-                                        <MessageCircle className="w-4 h-4 text-green-600" />
-                                        <span>{contact.whatsapp_number}</span>
-                                    </div>
-                                )}
-                                
-                                {contact.phone_number && (
-                                    <div className="flex items-center space-x-2 text-sm">
-                                        <Phone className="w-4 h-4 text-blue-600" />
-                                        <span>{contact.phone_number}</span>
-                                    </div>
-                                )}
-                                
-                                {contact.email && (
-                                    <div className="flex items-center space-x-2 text-sm">
-                                        <Mail className="w-4 h-4 text-gray-600" />
-                                        <span>{contact.email}</span>
-                                    </div>
-                                )}
+                                <button className="text-gray-400 hover:text-gray-600">
+                                    <Edit className="w-4 h-4" />
+                                </button>
                             </div>
                         </div>
                     ))}
@@ -357,37 +471,42 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
         </div>
     );
 
+    // Staff Tab Component
     const StaffTab = () => (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Assigned Sales Staff</h3>
-                <button className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 text-sm font-medium">
-                    <Plus className="w-4 h-4" />
-                    <span>Assign Staff</span>
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Assigned Staff</h3>
+                <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                    Assign Staff
                 </button>
             </div>
-
-            {assignedStaff.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p>No staff assigned</p>
+            
+            {errors.staff ? (
+                <div className="text-center py-8">
+                    <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">{errors.staff}</p>
+                </div>
+            ) : !Array.isArray(assignedStaff) || assignedStaff.length === 0 ? (
+                <div className="text-center py-8">
+                    <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No staff assigned</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {assignedStaff.map((staff) => (
-                        <div key={staff.user_id} className="bg-white border border-gray-200 rounded-lg p-4">
+                    {assignedStaff.map((staff, index) => (
+                        <div key={staff.user_id || index} className="bg-white border border-gray-200 rounded-lg p-4">
                             <div className="flex items-center space-x-3">
                                 <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
                                     <span className="text-white font-medium">
-                                        {staff.full_name.charAt(0)}
+                                        {(staff.full_name && staff.full_name.charAt(0)) || 'U'}
                                     </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-900 truncate">
-                                        {staff.full_name}
+                                        {staff.full_name || 'Unknown Staff'}
                                     </p>
                                     <p className="text-sm text-gray-500 truncate">
-                                        {staff.email}
+                                        {staff.email || 'No email'}
                                     </p>
                                     <p className="text-sm text-gray-500">
                                         Assigned: {formatDate(staff.assigned_date)}
@@ -410,27 +529,25 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
                     <div>
                         <h2 className="text-xl font-semibold text-gray-900">
-                            {distributorData.distributor_name}
+                            {distributorData.distributor_name || 'Distributor Details'}
                         </h2>
                         <p className="text-sm text-gray-600">
                             Distributor Details
                         </p>
                     </div>
-                    
                     <div className="flex items-center space-x-3">
                         <button
                             onClick={onEdit}
-                            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                         >
                             <Edit className="w-4 h-4" />
                             <span>Edit</span>
                         </button>
-                        
                         <button
                             onClick={onClose}
                             className="p-2 hover:bg-gray-100 rounded-lg"
@@ -441,7 +558,7 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
                 </div>
 
                 {/* Tabs */}
-                <div className="border-b border-gray-200">
+                <div className="border-b border-gray-200 bg-gray-50">
                     <nav className="flex space-x-8 px-6">
                         {tabs.map((tab) => (
                             <button
@@ -454,20 +571,28 @@ const DistributorDetails = ({ distributor, onClose, onEdit }) => {
                                 }`}
                             >
                                 {tab.label}
+                                {/* Show error indicator if there's an error for this tab */}
+                                {((tab.id === 'invoices' && errors.invoices) ||
+                                  (tab.id === 'contacts' && errors.contacts) ||
+                                  (tab.id === 'staff' && errors.staff)) && (
+                                    <span className="ml-1 text-red-500">⚠</span>
+                                )}
                             </button>
                         ))}
                     </nav>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto bg-gray-50">
                     {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader className="w-8 h-8 animate-spin text-blue-600" />
-                            <span className="ml-2 text-gray-600">Loading...</span>
+                        <div className="flex items-center justify-center h-full">
+                            <Loader className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+                            <span className="text-gray-600">Loading details...</span>
                         </div>
                     ) : (
-                        tabs.find(tab => tab.id === activeTab)?.component
+                        <div className="p-6">
+                            {tabs.find(tab => tab.id === activeTab)?.component}
+                        </div>
                     )}
                 </div>
             </div>
