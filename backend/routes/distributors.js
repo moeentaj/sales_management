@@ -125,230 +125,175 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// POST /api/distributors - Create new distributor
+// POST /api/distributors - Create new distributor (basic fields only)
 router.post('/', authenticateToken, requireRole('admin'), createDistributorValidation, async (req, res) => {
-    const client = await getClient();
-
     try {
+        const {
+            distributor_name,
+            address,
+            city,
+            ntn_number,
+            primary_contact_person,
+            primary_whatsapp_number,
+            is_active = true
+        } = req.body;
+
+        // Check for validation errors
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({
                 success: false,
-                message: 'Validation failed',
+                message: 'Validation errors',
                 errors: errors.array()
             });
         }
 
-        await client.query('BEGIN');
-
-        const {
-            distributor_name, address, city, state, postal_code, ntn_number,
-            primary_contact_person, primary_whatsapp_number, contacts = [], assigned_staff = []
-        } = req.body;
-
-        // Insert distributor
-        const distributorResult = await client.query(
-            `INSERT INTO distributors (distributor_name, address, city, state, postal_code, 
-                                     ntn_number, primary_contact_person, primary_whatsapp_number, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             RETURNING distributor_id, distributor_name, address, city, state, postal_code, 
-                       ntn_number, primary_contact_person, primary_whatsapp_number, 
-                       is_active, created_at`,
-            [distributor_name, address, city, state, postal_code, ntn_number,
-                primary_contact_person, primary_whatsapp_number, req.user.user_id]
+        // Check if distributor name already exists
+        const existingDistributor = await query(
+            'SELECT distributor_id FROM distributors WHERE LOWER(distributor_name) = LOWER($1)',
+            [distributor_name]
         );
 
-        const distributor = distributorResult.rows[0];
-
-        // Insert additional contacts
-        if (contacts && contacts.length > 0) {
-            for (const contact of contacts) {
-                await client.query(
-                    `INSERT INTO distributor_contacts (distributor_id, contact_person_name, 
-                                                     whatsapp_number, phone_number, email, designation, is_primary)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [distributor.distributor_id, contact.contact_person_name, contact.whatsapp_number,
-                    contact.phone_number, contact.email, contact.designation, contact.is_primary || false]
-                );
-            }
-        }
-
-        // Assign sales staff
-        if (assigned_staff && assigned_staff.length > 0) {
-            for (const staffId of assigned_staff) {
-                await client.query(
-                    `INSERT INTO sales_staff_distributors (sales_staff_id, distributor_id)
-                     VALUES ($1, $2)`,
-                    [staffId, distributor.distributor_id]
-                );
-            }
-        }
-
-        await client.query('COMMIT');
-
-        res.status(201).json({
-            success: true,
-            message: 'Distributor created successfully',
-            data: distributor
-        });
-
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Create distributor error:', error);
-
-        if (error.code === '23505') { // Unique violation
+        if (existingDistributor.rows.length > 0) {
             return res.status(400).json({
                 success: false,
                 message: 'Distributor with this name already exists'
             });
         }
 
+        // Create new distributor
+        const result = await query(
+            `INSERT INTO distributors 
+             (distributor_name, address, city, ntn_number, primary_contact_person, 
+              primary_whatsapp_number, is_active, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING distributor_id, distributor_name, address, city, ntn_number, 
+                       primary_contact_person, primary_whatsapp_number, is_active, 
+                       created_at, updated_at`,
+            [distributor_name, address, city, ntn_number, primary_contact_person,
+                primary_whatsapp_number, is_active, req.user.user_id]
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Distributor created successfully',
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('Create distributor error:', error);
         res.status(500).json({
             success: false,
             message: 'Internal server error'
         });
-    } finally {
-        client.release();
     }
 });
 
-// PUT /api/distributors/:id - Update distributor
+// PUT /api/distributors/:id - Update distributor (basic fields only)
 router.put('/:id', authenticateToken, requireRole('admin'), updateDistributorValidation, async (req, res) => {
-    const client = await getClient();
-
     try {
+        const distributorId = req.params.id;
+        const {
+            distributor_name,
+            address,
+            city,
+            ntn_number,
+            primary_contact_person,
+            primary_whatsapp_number,
+            is_active
+        } = req.body;
+
+        // Check for validation errors
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({
                 success: false,
-                message: 'Validation failed',
+                message: 'Validation errors',
                 errors: errors.array()
             });
         }
 
-        const distributorId = req.params.id;
-
-        await client.query('BEGIN');
-
-        const {
-            distributor_name, address, city, state, postal_code, ntn_number,
-            primary_contact_person, primary_whatsapp_number, contacts, assigned_staff
-        } = req.body;
-
-        // Build dynamic update query
-        const updates = [];
-        const params = [];
-        let paramIndex = 1;
-
-        if (distributor_name !== undefined) {
-            updates.push(`distributor_name = ${paramIndex++}`);
-            params.push(distributor_name);
-        }
-        if (address !== undefined) {
-            updates.push(`address = ${paramIndex++}`);
-            params.push(address);
-        }
-        if (city !== undefined) {
-            updates.push(`city = ${paramIndex++}`);
-            params.push(city);
-        }
-        if (state !== undefined) {
-            updates.push(`state = ${paramIndex++}`);
-            params.push(state);
-        }
-        if (postal_code !== undefined) {
-            updates.push(`postal_code = ${paramIndex++}`);
-            params.push(postal_code);
-        }
-        if (ntn_number !== undefined) {
-            updates.push(`ntn_number = ${paramIndex++}`);
-            params.push(ntn_number);
-        }
-        if (primary_contact_person !== undefined) {
-            updates.push(`primary_contact_person = ${paramIndex++}`);
-            params.push(primary_contact_person);
-        }
-        if (primary_whatsapp_number !== undefined) {
-            updates.push(`primary_whatsapp_number = ${paramIndex++}`);
-            params.push(primary_whatsapp_number);
-        }
-
-        if (updates.length === 0 && !contacts && !assigned_staff) {
-            return res.status(400).json({
-                success: false,
-                message: 'No fields to update'
-            });
-        }
-
-        // Update distributor if there are field updates
-        if (updates.length > 0) {
-            updates.push(`updated_at = CURRENT_TIMESTAMP`);
-            params.push(distributorId);
-
-            await client.query(
-                `UPDATE distributors SET ${updates.join(', ')} WHERE distributor_id = ${paramIndex}`,
-                params
-            );
-        }
-
-        // Update contacts if provided
-        if (contacts !== undefined) {
-            // Delete existing contacts
-            await client.query(
-                'DELETE FROM distributor_contacts WHERE distributor_id = $1',
-                [distributorId]
-            );
-
-            // Insert new contacts
-            for (const contact of contacts) {
-                await client.query(
-                    `INSERT INTO distributor_contacts (distributor_id, contact_person_name, 
-                                                     whatsapp_number, phone_number, email, designation, is_primary)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [distributorId, contact.contact_person_name, contact.whatsapp_number,
-                        contact.phone_number, contact.email, contact.designation, contact.is_primary || false]
-                );
-            }
-        }
-
-        // Update staff assignments if provided
-        if (assigned_staff !== undefined) {
-            // Deactivate existing assignments
-            await client.query(
-                'UPDATE sales_staff_distributors SET is_active = false WHERE distributor_id = $1',
-                [distributorId]
-            );
-
-            // Insert new assignments
-            for (const staffId of assigned_staff) {
-                await client.query(
-                    `INSERT INTO sales_staff_distributors (sales_staff_id, distributor_id)
-                     VALUES ($1, $2)
-                     ON CONFLICT (sales_staff_id, distributor_id) 
-                     DO UPDATE SET is_active = true, assigned_date = CURRENT_DATE`,
-                    [staffId, distributorId]
-                );
-            }
-        }
-
-        // Get updated distributor
-        const result = await client.query(
-            `SELECT distributor_id, distributor_name, address, city, state, postal_code, 
-                    ntn_number, primary_contact_person, primary_whatsapp_number, 
-                    is_active, updated_at
-             FROM distributors WHERE distributor_id = $1`,
+        // Check if distributor exists
+        const existingDistributor = await query(
+            'SELECT distributor_id FROM distributors WHERE distributor_id = $1',
             [distributorId]
         );
 
-        if (result.rows.length === 0) {
-            await client.query('ROLLBACK');
+        if (existingDistributor.rows.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Distributor not found'
             });
         }
 
-        await client.query('COMMIT');
+        // Build dynamic update query - only update provided fields
+        const updates = [];
+        const params = [];
+        let paramIndex = 1;
+
+        if (distributor_name !== undefined) {
+            updates.push(`distributor_name = $${paramIndex++}::text`);
+            params.push(distributor_name);
+        }
+        if (address !== undefined) {
+            updates.push(`address = $${paramIndex++}::text`);
+            params.push(address);
+        }
+        if (city !== undefined) {
+            updates.push(`city = $${paramIndex++}::text`);
+            params.push(city);
+        }
+        if (ntn_number !== undefined) {
+            updates.push(`ntn_number = $${paramIndex++}::text`);
+            params.push(ntn_number);
+        }
+        if (primary_contact_person !== undefined) {
+            updates.push(`primary_contact_person = $${paramIndex++}::text`);
+            params.push(primary_contact_person);
+        }
+        if (primary_whatsapp_number !== undefined) {
+            updates.push(`primary_whatsapp_number = $${paramIndex++}::text`);
+            params.push(primary_whatsapp_number);
+        }
+        if (is_active !== undefined) {
+            const isActiveBool = typeof is_active === 'boolean' ? is_active : !!Number(is_active);
+            updates.push(`is_active = $${paramIndex++}::boolean`);
+            params.push(isActiveBool);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ success: false, message: 'No fields to update' });
+        }
+
+        // timestamp
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+        // WHERE as a parameter (not interpolated)
+        params.push(distributorId);
+        const wherePlaceholder = `$${paramIndex}`;
+
+        const sql = `
+            UPDATE distributors
+            SET ${updates.join(', ')}
+            WHERE distributor_id = ${wherePlaceholder}
+            RETURNING distributor_id, distributor_name, address, city, ntn_number,
+                        primary_contact_person, primary_whatsapp_number, is_active,
+                        created_at, updated_at
+            `;
+
+        // (optional) debug
+        console.log('SQL:', sql);
+        console.log('Params:', params);
+
+        // Execute
+        const result = await query(sql, params);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Distributor not found'
+            });
+        }
 
         res.json({
             success: true,
@@ -357,22 +302,11 @@ router.put('/:id', authenticateToken, requireRole('admin'), updateDistributorVal
         });
 
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error('Update distributor error:', error);
-
-        if (error.code === '23505') { // Unique violation
-            return res.status(400).json({
-                success: false,
-                message: 'Distributor with this name already exists'
-            });
-        }
-
         res.status(500).json({
             success: false,
             message: 'Internal server error'
         });
-    } finally {
-        client.release();
     }
 });
 
@@ -527,7 +461,7 @@ router.get('/:id/invoices', authenticateToken, async (req, res) => {
 
         } catch (queryError) {
             console.error('Query error in distributor invoices:', queryError);
-            
+
             // If invoices table doesn't exist or has issues, return empty result
             res.json({
                 success: true,
@@ -779,7 +713,7 @@ router.post('/:id/staff', authenticateToken, requireRole('admin'), async (req, r
         );
 
         // Add new assignments
-        const insertPromises = staff_ids.map(staffId => 
+        const insertPromises = staff_ids.map(staffId =>
             query(
                 `INSERT INTO sales_staff_distributors (sales_staff_id, distributor_id, assigned_date, is_active)
                  VALUES ($1, $2, CURRENT_TIMESTAMP, true)
@@ -1125,7 +1059,7 @@ router.get('/export', authenticateToken, async (req, res) => {
             ];
 
             const csvRows = [headers.join(',')];
-            
+
             result.rows.forEach(row => {
                 const values = [
                     `"${row.distributor_name || ''}"`,
