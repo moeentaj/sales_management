@@ -122,15 +122,15 @@ export const distributorService = {
         return response.data;
     },
 
-    // Assign staff to distributor
-    assignStaffToDistributor: async (distributorId, staffIds) => {
-        const response = await api.post(`/distributors/${distributorId}/staff`, { staff_ids: staffIds });
+    // Remove staff from distributor (needed for the DELETE call in frontend)
+    removeStaffFromDistributor: async (distributorId, staffId) => {
+        const response = await api.delete(`/distributors/${distributorId}/staff/${staffId}`);
         return response.data;
     },
 
-    // Remove staff assignment from distributor
-    removeStaffFromDistributor: async (distributorId, staffId) => {
-        const response = await api.delete(`/distributors/${distributorId}/staff/${staffId}`);
+    // Assign multiple staff to distributor (should already exist)
+    assignStaffToDistributor: async (distributorId, staffIds) => {
+        const response = await api.post(`/distributors/${distributorId}/staff`, { staffIds });
         return response.data;
     },
 
@@ -143,7 +143,7 @@ export const distributorService = {
         } = params;
 
         const queryParams = new URLSearchParams({ period });
-        
+
         if (start_date) queryParams.append('start_date', start_date);
         if (end_date) queryParams.append('end_date', end_date);
 
@@ -203,7 +203,7 @@ export const distributorService = {
     importDistributors: async (file, options = {}) => {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         Object.keys(options).forEach(key => {
             formData.append(key, options[key]);
         });
@@ -222,7 +222,7 @@ export const distributorService = {
         // Format distributor display name
         formatDisplayName: (distributor) => {
             if (!distributor) return '';
-            
+
             let name = distributor.distributor_name;
             if (distributor.city) {
                 name += ` (${distributor.city})`;
@@ -233,7 +233,7 @@ export const distributorService = {
         // Get distributor status badge info
         getStatusInfo: (distributor) => {
             if (!distributor) return { label: 'Unknown', color: 'gray' };
-            
+
             if (distributor.is_active) {
                 return { label: 'Active', color: 'green' };
             } else {
@@ -305,19 +305,19 @@ export const distributorService = {
         // Search and filter helpers
         createSearchFilters: (searchTerm, selectedCity, activeStatus) => {
             const filters = {};
-            
+
             if (searchTerm && searchTerm.trim()) {
                 filters.search = searchTerm.trim();
             }
-            
+
             if (selectedCity && selectedCity !== 'all') {
                 filters.city = selectedCity;
             }
-            
+
             if (activeStatus !== null && activeStatus !== 'all') {
                 filters.is_active = activeStatus === 'active';
             }
-            
+
             return filters;
         },
 
